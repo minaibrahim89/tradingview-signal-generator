@@ -1,0 +1,68 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+
+from app.models.database import EmailMonitorConfig, get_db
+from app.schemas.email_config import EmailMonitorCreate, EmailMonitorUpdate, EmailMonitorInDB
+
+router = APIRouter()
+
+
+@router.post("/", response_model=EmailMonitorInDB, status_code=status.HTTP_201_CREATED)
+def create_email_config(config: EmailMonitorCreate, db: Session = Depends(get_db)):
+    """Create a new email monitor configuration."""
+    db_config = EmailMonitorConfig(**config.dict())
+    db.add(db_config)
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+
+@router.get("/", response_model=List[EmailMonitorInDB])
+def get_email_configs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get all email monitor configurations."""
+    configs = db.query(EmailMonitorConfig).offset(skip).limit(limit).all()
+    return configs
+
+
+@router.get("/{config_id}", response_model=EmailMonitorInDB)
+def get_email_config(config_id: int, db: Session = Depends(get_db)):
+    """Get a specific email monitor configuration by ID."""
+    config = db.query(EmailMonitorConfig).filter(
+        EmailMonitorConfig.id == config_id).first()
+    if config is None:
+        raise HTTPException(
+            status_code=404, detail="Email monitor configuration not found")
+    return config
+
+
+@router.put("/{config_id}", response_model=EmailMonitorInDB)
+def update_email_config(config_id: int, config: EmailMonitorUpdate, db: Session = Depends(get_db)):
+    """Update an email monitor configuration."""
+    db_config = db.query(EmailMonitorConfig).filter(
+        EmailMonitorConfig.id == config_id).first()
+    if db_config is None:
+        raise HTTPException(
+            status_code=404, detail="Email monitor configuration not found")
+
+    update_data = config.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_config, key, value)
+
+    db.commit()
+    db.refresh(db_config)
+    return db_config
+
+
+@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_email_config(config_id: int, db: Session = Depends(get_db)):
+    """Delete an email monitor configuration."""
+    db_config = db.query(EmailMonitorConfig).filter(
+        EmailMonitorConfig.id == config_id).first()
+    if db_config is None:
+        raise HTTPException(
+            status_code=404, detail="Email monitor configuration not found")
+
+    db.delete(db_config)
+    db.commit()
+    return None
