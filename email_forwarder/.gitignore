@@ -37,4 +37,41 @@ token.json
 
 # OS specific files
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Frontend - Node modules and dependencies
+frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.js
+
+# Frontend - Testing
+frontend/coverage/
+
+# Frontend - Production build
+frontend/dist/
+frontend/build/
+static/
+
+# Frontend - Environment variables
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Frontend - Logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+
+# Frontend - Editor specific
+frontend/.idea/
+frontend/.vscode/
+frontend/*.suo
+frontend/*.ntvs*
+frontend/*.njsproj
+frontend/*.sln
+frontend/*.sw?
+
+# Frontend - Vite specific
+frontend/.vite/ 

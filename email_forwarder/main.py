@@ -1,8 +1,9 @@
 import asyncio
 import os
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
@@ -77,6 +78,12 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api/v1")
 
 
+# Serve static files
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
 @app.get("/")
 async def root():
     """Redirect to API documentation."""
@@ -91,6 +98,43 @@ async def health_check():
         "version": "1.0.0",
         "email_processor_active": email_processor._running
     }
+
+
+@app.get("/api/v1/processed-emails")
+async def get_processed_emails(
+    skip: int = 0,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """Get processed emails with pagination."""
+    from app.models.database import ProcessedEmail
+    emails = db.query(ProcessedEmail).order_by(
+        ProcessedEmail.processed_at.desc()
+    ).offset(skip).limit(limit).all()
+
+    total = db.query(ProcessedEmail).count()
+
+    return {
+        "data": emails,
+        "total": total
+    }
+
+
+# Serve frontend
+@app.get("/{full_path:path}")
+async def serve_frontend(request: Request, full_path: str):
+    """Serve the frontend React app."""
+    # Check if the path is an API call
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found")
+
+    # Serve the index.html for all other paths
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        # If frontend is not built yet, redirect to API docs
+        return RedirectResponse(url="/docs")
 
 
 if __name__ == "__main__":

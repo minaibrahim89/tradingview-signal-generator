@@ -8,12 +8,14 @@ A Python FastAPI application that monitors Gmail inbox for trading signals and f
 - Filter emails by sender, subject, or other criteria
 - Forward email body content to configurable webhook URLs
 - Track processed emails to avoid duplicate processing
+- Modern React UI for easy configuration and monitoring
 - RESTful API for configuration management
 - SQLite database for persistent storage
 
 ## Requirements
 
 - Python 3.8+
+- Node.js 16+ (for UI development)
 - Gmail account
 - Google Cloud Platform account (for Gmail API access)
 
@@ -36,7 +38,11 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ### 3. Install dependencies
 
 ```bash
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies (optional, only needed for development)
+npm run install:all
 ```
 
 ### 4. Set up Gmail API credentials
@@ -84,9 +90,34 @@ USE_LOCAL_SERVER_AUTH=false
 
 ## Running the application
 
+### Production mode
+
+For production use, first build the frontend:
+
+```bash
+npm run frontend:build
+```
+
+Then run the FastAPI application:
+
 ```bash
 python main.py
 ```
+
+The application will be available at http://localhost:8000
+
+### Development mode
+
+For development, you can run both the backend and frontend in development mode:
+
+```bash
+npm run dev
+```
+
+This starts:
+
+- The FastAPI backend at http://localhost:8000
+- The React development server at http://localhost:5173
 
 ### Authentication methods
 
@@ -121,48 +152,44 @@ If you encounter an error like `Fehler 400: invalid_request` or other OAuth issu
    - When copying the authorization code, make sure to copy the entire code parameter from the URL
 4. **Redirect URI**: If modifying the code, ensure your redirect URI matches what's configured in Google Cloud Console
 
+## User Interface
+
+The application includes a modern React UI built with Material UI that provides:
+
+1. **Dashboard**
+
+   - Quick overview of application status
+   - Active webhooks and email configurations
+   - Quick links to main functionality
+
+2. **Webhooks Management**
+
+   - Add, edit and delete webhook configurations
+   - Set active/inactive status
+
+3. **Email Configuration**
+
+   - Configure which emails to monitor
+   - Add filters for subject or sender
+   - Set check intervals and active status
+
+4. **Processed Emails**
+
+   - View all processed emails
+   - Check forwarding status
+   - View email content
+
+5. **Settings**
+   - Upload Gmail API credentials
+   - Reset Google authentication
+   - View configuration
+
 ## API Documentation
 
-Once the application is running, you can access the API documentation at:
+The API documentation is available at:
 
 ```
 http://localhost:8000/docs
-```
-
-## Configuring the application
-
-### 1. Add webhook endpoints
-
-Use the `/api/v1/webhooks` endpoint to add URLs where email content should be forwarded.
-
-Example:
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/webhooks" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Trading Platform",
-    "url": "https://your-trading-platform.com/webhook",
-    "active": true
-  }'
-```
-
-### 2. Configure email monitoring
-
-Use the `/api/v1/email-configs` endpoint to configure which emails should be monitored.
-
-Example:
-
-```bash
-curl -X POST "http://localhost:8000/api/v1/email-configs" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email_address": "your-email@gmail.com",
-    "filter_subject": "Trading Signal",
-    "filter_sender": "signals@trading-provider.com",
-    "check_interval_seconds": 60,
-    "active": true
-  }'
 ```
 
 ## Webhook Payload Format
