@@ -21,13 +21,22 @@ import {
   CircularProgress,
   Alert,
   Snackbar,
+  Tooltip,
+  Divider,
+  Card,
+  CardContent,
+  Collapse,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Send as SendIcon,
+  Check as CheckIcon,
+  Error as ErrorIcon,
+  Code as CodeIcon,
 } from '@mui/icons-material';
-import { getWebhooks, createWebhook, updateWebhook, deleteWebhook } from '../services/api';
+import { getWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from '../services/api';
 
 function Webhooks() {
   const [webhooks, setWebhooks] = useState([]);
@@ -45,6 +54,10 @@ function Webhooks() {
     message: '',
     severity: 'success',
   });
+  const [testResults, setTestResults] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testingWebhookId, setTestingWebhookId] = useState(null);
+  const [showPayload, setShowPayload] = useState(false);
 
   // Fetch webhooks on component mount
   useEffect(() => {
@@ -163,6 +176,40 @@ function Webhooks() {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
+  const handleTest = async (webhook) => {
+    try {
+      setTestLoading(true);
+      setTestingWebhookId(webhook.id);
+      setTestResults(null);
+      
+      const response = await testWebhook(webhook.id);
+      
+      setTestResults(response.data);
+      
+      setSnackbar({
+        open: true,
+        message: response.data.success ? 
+          `Successfully sent test email to webhook ${webhook.name}` : 
+          `Failed to send test email to webhook ${webhook.name}`,
+        severity: response.data.success ? 'success' : 'error',
+      });
+    } catch (err) {
+      console.error('Error testing webhook:', err);
+      setSnackbar({
+        open: true,
+        message: `Error testing webhook: ${err.response?.data?.detail || err.message}`,
+        severity: 'error',
+      });
+    } finally {
+      setTestLoading(false);
+      setTestingWebhookId(null);
+    }
+  };
+
+  const handleTogglePayload = () => {
+    setShowPayload(!showPayload);
+  };
+
   return (
     <Box>
       <Snackbar
@@ -191,6 +238,62 @@ function Webhooks() {
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
+      )}
+
+      {testResults && (
+        <Card sx={{ mb: 3 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography variant="h6">
+                Test Results: {testResults.webhook_name}
+              </Typography>
+              <Box>
+                {testResults.success ? (
+                  <Tooltip title="Success">
+                    <CheckIcon color="success" />
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Failed">
+                    <ErrorIcon color="error" />
+                  </Tooltip>
+                )}
+              </Box>
+            </Box>
+            
+            <Divider sx={{ my: 1 }} />
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Status Code: {testResults.status_code || 'N/A'}
+            </Typography>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Response: {testResults.response || 'No response'}
+            </Typography>
+            
+            <Button 
+              startIcon={<CodeIcon />}
+              size="small"
+              onClick={handleTogglePayload}
+              sx={{ mt: 1 }}
+            >
+              {showPayload ? 'Hide' : 'Show'} Sample Payload
+            </Button>
+            
+            <Collapse in={showPayload}>
+              <Paper 
+                sx={{ 
+                  p: 2, 
+                  mt: 1, 
+                  bgcolor: 'grey.100',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}
+              >
+                <pre>{testResults.sample_payload}</pre>
+              </Paper>
+            </Collapse>
+          </CardContent>
+        </Card>
       )}
 
       <Paper>
@@ -235,20 +338,36 @@ function Webhooks() {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleOpenDialog(webhook)}
-                        disabled={loading}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        color="error"
-                        onClick={() => handleDelete(webhook.id)}
-                        disabled={loading}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+                      <Tooltip title="Test Webhook">
+                        <IconButton
+                          color="info"
+                          onClick={() => handleTest(webhook)}
+                          disabled={loading || (testLoading && testingWebhookId === webhook.id)}
+                        >
+                          {testLoading && testingWebhookId === webhook.id ? 
+                            <CircularProgress size={24} /> : 
+                            <SendIcon />
+                          }
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit">
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleOpenDialog(webhook)}
+                          disabled={loading}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete">
+                        <IconButton
+                          color="error"
+                          onClick={() => handleDelete(webhook.id)}
+                          disabled={loading}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))
@@ -258,57 +377,52 @@ function Webhooks() {
         </TableContainer>
       </Paper>
 
-      {/* Add/Edit Dialog */}
+      {/* Webhook Form Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
           {editingWebhook ? 'Edit Webhook' : 'Add Webhook'}
         </DialogTitle>
         <DialogContent>
-          <Box component="form" sx={{ mt: 1 }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="Webhook Name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-              autoFocus
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              label="Webhook URL"
-              name="url"
-              value={formData.url}
-              onChange={handleInputChange}
-              placeholder="https://your-webhook-url.com"
-              helperText="The URL where email content will be sent"
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={formData.active}
-                  onChange={handleInputChange}
-                  name="active"
-                  color="primary"
-                />
-              }
-              label="Active"
-              sx={{ mt: 1 }}
-            />
-          </Box>
+          <TextField
+            autoFocus
+            margin="dense"
+            name="name"
+            label="Webhook Name"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={formData.name}
+            onChange={handleInputChange}
+            required
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            name="url"
+            label="Webhook URL"
+            type="url"
+            fullWidth
+            variant="outlined"
+            value={formData.url}
+            onChange={handleInputChange}
+            required
+            helperText="The URL that will receive webhook data"
+            sx={{ mb: 2 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.active}
+                onChange={handleInputChange}
+                name="active"
+              />
+            }
+            label="Active"
+          />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={loading || !formData.name || !formData.url}
-          >
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained">
             {loading ? <CircularProgress size={24} /> : 'Save'}
           </Button>
         </DialogActions>

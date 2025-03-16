@@ -1,5 +1,5 @@
 from pydantic import BaseModel, HttpUrl, Field
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime
 
 
@@ -30,3 +30,12 @@ class WebhookInDB(WebhookBase):
 
     class Config:
         from_attributes = True
+
+
+class TestWebhookResponse(BaseModel):
+    success: bool = Field(..., description="Whether the test was successful")
+    webhook_id: int = Field(..., description="ID of the tested webhook")
+    webhook_name: str = Field(..., description="Name of the tested webhook")
+    status_code: Optional[int] = Field(None, description="HTTP status code of the response")
+    response: Optional[str] = Field(None, description="Response text from the webhook")
+    sample_payload: str = Field(..., description="Sample payload sent to the webhook")

@@ -8,6 +8,14 @@ const BASE_URL = '/api/v1';
 const normalizePath = (path) => {
     // Remove any leading slash to avoid double slashes
     const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+
+    // Don't add trailing slash for specific endpoints that don't need it
+    if (cleanPath.includes('/test') ||
+        cleanPath.match(/\/webhooks\/\d+$/) ||
+        cleanPath.includes('/upload-')) {
+        return cleanPath;
+    }
+
     // Return the path with a trailing slash to match backend expectations
     return cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`;
 };
@@ -65,6 +73,7 @@ export const getWebhook = (id) => api.get(`/webhooks/${id}`);
 export const createWebhook = (data) => api.post('/webhooks', data);
 export const updateWebhook = (id, data) => api.put(`/webhooks/${id}`, data);
 export const deleteWebhook = (id) => api.delete(`/webhooks/${id}`);
+export const testWebhook = (id) => api.post(`/webhooks/${id}/test`);
 
 // Email Configs API
 export const getEmailConfigs = () => api.get('/email-configs');
