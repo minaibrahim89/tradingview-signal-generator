@@ -27,27 +27,6 @@ import {
 } from '@mui/icons-material';
 import { getProcessedEmails } from '../services/api';
 
-// Mock API for processed emails (since we haven't implemented it in the backend yet)
-const mockProcessedEmails = async () => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // Return mock data
-  return {
-    data: Array.from({ length: 20 }, (_, i) => ({
-      id: i + 1,
-      message_id: `msg_${Math.random().toString(36).substring(2, 15)}`,
-      sender: `sender${i + 1}@example.com`,
-      subject: `Trading Signal #${i + 1}: ${Math.random() > 0.5 ? 'BUY' : 'SELL'} ${['BTC', 'ETH', 'ADA', 'SOL'][Math.floor(Math.random() * 4)]}`,
-      received_at: new Date(Date.now() - Math.floor(Math.random() * 7 * 24 * 60 * 60 * 1000)).toISOString(),
-      processed_at: new Date(Date.now() - Math.floor(Math.random() * 24 * 60 * 60 * 1000)).toISOString(),
-      forwarded_successfully: Math.random() > 0.2,
-      body_snippet: `Signal details: Price ${1000 + Math.floor(Math.random() * 50000)}, Target: ${1000 + Math.floor(Math.random() * 60000)}, Stop: ${900 + Math.floor(Math.random() * 5000)}...`,
-    })),
-    total: 84,
-  };
-};
-
 function ProcessedEmails() {
   const [emails, setEmails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -65,18 +44,26 @@ function ProcessedEmails() {
   const fetchEmails = async () => {
     try {
       setLoading(true);
-      // In a real implementation, you'd use the API like this:
-      // const res = await getProcessedEmails({ page, per_page: rowsPerPage });
+      // Use the real API implementation
+      const res = await getProcessedEmails({ page, per_page: rowsPerPage });
       
-      // For now, use the mock implementation
-      const res = await mockProcessedEmails();
+      // Ensure emails is always an array
+      if (res.data && Array.isArray(res.data)) {
+        setEmails(res.data);
+      } else if (res.data && Array.isArray(res.data.items)) {
+        // Some APIs nest the array under 'items' or similar property
+        setEmails(res.data.items);
+      } else {
+        console.error('API response is not in expected format:', res.data);
+        setEmails([]);
+      }
       
-      setEmails(res.data);
-      setTotalEmails(res.total);
+      setTotalEmails(res.total || 0);
       setError(null);
     } catch (err) {
       console.error('Error fetching processed emails:', err);
       setError('Failed to load processed emails. Please try again.');
+      setEmails([]);
     } finally {
       setLoading(false);
     }

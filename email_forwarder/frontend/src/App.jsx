@@ -7,19 +7,21 @@ import Webhooks from './pages/Webhooks';
 import EmailConfigs from './pages/EmailConfigs';
 import ProcessedEmails from './pages/ProcessedEmails';
 import Settings from './pages/Settings';
+import ApiTest from './components/ApiTest';
 
 function App() {
   return (
     <Box sx={{ display: 'flex' }}>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="webhooks" element={<Webhooks />} />
-          <Route path="email-configs" element={<EmailConfigs />} />
-          <Route path="processed-emails" element={<ProcessedEmails />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
-      </Routes>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/webhooks" element={<Webhooks />} />
+          <Route path="/email-configs" element={<EmailConfigs />} />
+          <Route path="/processed-emails" element={<ProcessedEmails />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/api-test" element={<ApiTest />} />
+        </Routes>
+      </Layout>
     </Box>
   );
 }

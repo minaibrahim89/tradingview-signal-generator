@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
   Box,
@@ -21,11 +21,12 @@ import {
   Email as EmailIcon,
   History as HistoryIcon,
   Settings as SettingsIcon,
+  BugReport as BugReportIcon,
 } from '@mui/icons-material';
 
 const drawerWidth = 240;
 
-function Layout() {
+function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -40,6 +41,7 @@ function Layout() {
     { text: 'Email Configs', icon: <EmailIcon />, path: '/email-configs' },
     { text: 'Processed Emails', icon: <HistoryIcon />, path: '/processed-emails' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+    { text: 'API Test', icon: <BugReportIcon />, path: '/api-test' },
   ];
 
   const drawer = (
@@ -131,7 +133,7 @@ function Layout() {
           mt: ['56px', '64px'],
         }}
       >
-        <Outlet />
+        {children}
       </Box>
     </Box>
   );

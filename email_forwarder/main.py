@@ -1,9 +1,12 @@
 import asyncio
 import os
+import sys
+import platform
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
@@ -43,6 +46,7 @@ async def lifespan(app: FastAPI):
     except:
         pass
 
+
 app = FastAPI(
     title="Email Signal Forwarder",
     description="""
@@ -65,14 +69,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS setup
+# Define allowed origins for CORS
+# In development, the React app runs on port 5173 by default
+origins = [
+    "http://localhost:5173",    # Vite dev server
+    "http://localhost:8000",    # FastAPI server
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8000",
+]
+
+# CORS setup with expanded settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Type", "Content-Length", "Content-Disposition"],
 )
+
+# Add GZip compression for responses
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
@@ -84,39 +101,35 @@ if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
-@app.get("/")
-async def root():
-    """Redirect to API documentation."""
-    return RedirectResponse(url="/docs")
+# Add a test endpoint to verify API connectivity
+@app.get("/api/test", include_in_schema=False)
+async def test_api():
+    """Test endpoint to verify API connectivity"""
+    return JSONResponse(content={"status": "ok", "message": "API is working correctly"})
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for monitoring."""
+    """Enhanced health check endpoint for monitoring."""
+    # Get system info
+    python_version = sys.version.split()[0]
+    os_info = f"{platform.system()} {platform.release()}"
+
+    token_path = os.getenv("GMAIL_TOKEN_PATH", "token.json")
+    credentials_path = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
+
     return {
         "status": "ok",
         "version": "1.0.0",
-        "email_processor_active": email_processor._running
-    }
-
-
-@app.get("/api/v1/processed-emails")
-async def get_processed_emails(
-    skip: int = 0,
-    limit: int = 10,
-    db: Session = Depends(get_db)
-):
-    """Get processed emails with pagination."""
-    from app.models.database import ProcessedEmail
-    emails = db.query(ProcessedEmail).order_by(
-        ProcessedEmail.processed_at.desc()
-    ).offset(skip).limit(limit).all()
-
-    total = db.query(ProcessedEmail).count()
-
-    return {
-        "data": emails,
-        "total": total
+        "environment": {
+            "python_version": python_version,
+            "os": os_info
+        },
+        "email_processor_active": email_processor._running,
+        "auth_status": {
+            "token_exists": os.path.exists(token_path),
+            "credentials_exist": os.path.exists(credentials_path)
+        }
     }
 
 
@@ -124,7 +137,8 @@ async def get_processed_emails(
 @app.get("/{full_path:path}")
 async def serve_frontend(request: Request, full_path: str):
     """Serve the frontend React app."""
-    # Check if the path is an API call
+    # Check if the path is an API call - already handled by the API router
+    # But in case someone tries to access /api/* directly without the /api/v1 prefix
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="API route not found")
 
@@ -143,6 +157,10 @@ if __name__ == "__main__":
     host = os.getenv("APP_HOST", "0.0.0.0")
     port = int(os.getenv("APP_PORT", "8000"))
     debug = os.getenv("DEBUG", "false").lower() == "true"
+
+    print(f"Starting server on http://{host}:{port}")
+    print(f"Debug mode: {debug}")
+    print(f"Documentation: http://{host}:{port}/docs")
 
     uvicorn.run(
         "main:app",
