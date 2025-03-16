@@ -25,6 +25,12 @@ def get_webhooks(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
     return webhooks
 
 
+@router.get("", response_model=List[WebhookInDB])
+def get_webhooks_no_slash(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get all webhook configurations (endpoint without trailing slash)."""
+    return get_webhooks(skip, limit, db)
+
+
 @router.get("/{webhook_id}", response_model=WebhookInDB)
 def get_webhook(webhook_id: int, db: Session = Depends(get_db)):
     """Get a specific webhook configuration by ID."""

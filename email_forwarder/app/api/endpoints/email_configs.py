@@ -25,6 +25,12 @@ def get_email_configs(skip: int = 0, limit: int = 100, db: Session = Depends(get
     return configs
 
 
+@router.get("", response_model=List[EmailMonitorInDB])
+def get_email_configs_no_slash(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get all email monitor configurations (endpoint without trailing slash)."""
+    return get_email_configs(skip, limit, db)
+
+
 @router.get("/{config_id}", response_model=EmailMonitorInDB)
 def get_email_config(config_id: int, db: Session = Depends(get_db)):
     """Get a specific email monitor configuration by ID."""

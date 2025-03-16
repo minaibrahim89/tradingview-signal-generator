@@ -66,7 +66,9 @@ app = FastAPI(
     3. Add email monitoring configurations
     """,
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    # Redirect trailing slashes - this will handle both /webhooks and /webhooks/
+    redirect_slashes=True
 )
 
 # Define allowed origins for CORS
@@ -91,9 +93,24 @@ app.add_middleware(
 # Add GZip compression for responses
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
+# Debug: Print registered routers before inclusion
+print("="*80)
+print("API ROUTER ROUTES BEFORE INCLUSION:")
+for route in api_router.routes:
+    if hasattr(route, "path"):
+        print(f"Route: {route.path}")
+print("="*80)
+
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
 
+# Debug: Print all app routes after inclusion
+print("="*80)
+print("ALL APP ROUTES AFTER INCLUSION:")
+for route in app.routes:
+    if hasattr(route, "path"):
+        print(f"Route: {route.path}")
+print("="*80)
 
 # Serve static files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
