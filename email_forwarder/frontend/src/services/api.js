@@ -12,6 +12,8 @@ const normalizePath = (path) => {
     // Don't add trailing slash for specific endpoints that don't need it
     if (cleanPath.includes('/test') ||
         cleanPath.match(/\/webhooks\/\d+$/) ||
+        cleanPath.match(/\/email-configs\/\d+$/) ||
+        cleanPath.match(/\/processed-emails\/\d+$/) ||
         cleanPath.includes('/upload-')) {
         return cleanPath;
     }
@@ -90,6 +92,7 @@ export const getEmailsSummary = () => api.get('/stats/processed-emails/summary')
 export const getProcessedEmails = (params) => api.get('/processed-emails', { params });
 export const getProcessedEmail = (id) => api.get(`/processed-emails/${id}`);
 export const deleteProcessedEmail = (id) => api.delete(`/processed-emails/${id}`);
+export const clearAllProcessedEmails = () => api.delete('/processed-emails');
 
 // Health API
 export const getHealth = () => axios.get('/health');

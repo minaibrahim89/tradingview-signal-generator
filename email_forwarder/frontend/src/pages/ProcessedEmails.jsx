@@ -19,13 +19,15 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Snackbar,
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
   Visibility as ViewIcon,
+  DeleteSweep as DeleteSweepIcon,
 } from '@mui/icons-material';
-import { getProcessedEmails } from '../services/api';
+import { getProcessedEmails, clearAllProcessedEmails } from '../services/api';
 
 function ProcessedEmails() {
   const [emails, setEmails] = useState([]);
@@ -36,6 +38,12 @@ function ProcessedEmails() {
   const [totalEmails, setTotalEmails] = useState(0);
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [openDialog, setOpenDialog] = useState(false);
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   useEffect(() => {
     fetchEmails();
@@ -85,6 +93,35 @@ function ProcessedEmails() {
     }
   };
 
+  const handleClearAllEmails = async () => {
+    setOpenConfirmDialog(false);
+    
+    try {
+      setLoading(true);
+      const response = await clearAllProcessedEmails();
+      console.log('Clear all response:', response);
+      
+      setSnackbar({
+        open: true,
+        message: response.data?.message || 'Successfully cleared all processed emails',
+        severity: 'success',
+      });
+      
+      // Reset to first page and refresh
+      setPage(0);
+      await fetchEmails();
+    } catch (err) {
+      console.error('Error clearing emails:', err);
+      setSnackbar({
+        open: true,
+        message: `Failed to clear emails: ${err.response?.data?.detail || err.message}`,
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
   };
@@ -103,6 +140,10 @@ function ProcessedEmails() {
     setOpenDialog(false);
   };
 
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleString();
@@ -110,9 +151,29 @@ function ProcessedEmails() {
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Processed Emails
-      </Typography>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+      
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4">Processed Emails</Typography>
+        <Button
+          variant="contained"
+          color="error"
+          startIcon={<DeleteSweepIcon />}
+          onClick={() => setOpenConfirmDialog(true)}
+          disabled={loading || totalEmails === 0}
+        >
+          Clear All
+        </Button>
+      </Box>
       
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -234,6 +295,31 @@ function ProcessedEmails() {
             </DialogActions>
           </>
         )}
+      </Dialog>
+      
+      {/* Confirm clear all dialog */}
+      <Dialog
+        open={openConfirmDialog}
+        onClose={() => setOpenConfirmDialog(false)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <DialogTitle id="alert-dialog-title">
+          Clear All Processed Emails?
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete all processed email records? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenConfirmDialog(false)} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={handleClearAllEmails} color="error" autoFocus>
+            Clear All
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

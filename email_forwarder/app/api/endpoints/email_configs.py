@@ -49,6 +49,12 @@ def get_email_config(config_id: int, db: Session = Depends(get_db)):
     return config
 
 
+@router.get("/{config_id}/", response_model=EmailMonitorInDB)
+def get_email_config_with_slash(config_id: int, db: Session = Depends(get_db)):
+    """Get a specific email monitor configuration by ID (endpoint with trailing slash)."""
+    return get_email_config(config_id, db)
+
+
 @router.put("/{config_id}", response_model=EmailMonitorInDB)
 def update_email_config(config_id: int, config: EmailMonitorUpdate, db: Session = Depends(get_db)):
     """Update an email monitor configuration."""
@@ -73,6 +79,12 @@ def update_email_config(config_id: int, config: EmailMonitorUpdate, db: Session 
     return db_config
 
 
+@router.put("/{config_id}/", response_model=EmailMonitorInDB)
+def update_email_config_with_slash(config_id: int, config: EmailMonitorUpdate, db: Session = Depends(get_db)):
+    """Update an email monitor configuration (endpoint with trailing slash)."""
+    return update_email_config(config_id, config, db)
+
+
 @router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_email_config(config_id: int, db: Session = Depends(get_db)):
     """Delete an email monitor configuration."""
@@ -85,3 +97,9 @@ def delete_email_config(config_id: int, db: Session = Depends(get_db)):
     db.delete(db_config)
     db.commit()
     return None
+
+
+@router.delete("/{config_id}/", status_code=status.HTTP_204_NO_CONTENT)
+def delete_email_config_with_slash(config_id: int, db: Session = Depends(get_db)):
+    """Delete an email monitor configuration (endpoint with trailing slash)."""
+    return delete_email_config(config_id, db)

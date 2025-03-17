@@ -108,3 +108,25 @@ async def delete_processed_email(email_id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "success", "message": "Email record deleted successfully"}
+
+
+@router.delete("/")
+async def clear_all_processed_emails(db: Session = Depends(get_db)):
+    """Clear all processed email records"""
+    # Get count before deletion for reporting
+    count = db.query(ProcessedEmail).count()
+    
+    # Delete all records
+    db.query(ProcessedEmail).delete()
+    db.commit()
+    
+    return {
+        "status": "success", 
+        "message": f"Successfully cleared {count} processed email records"
+    }
+
+
+@router.delete("", status_code=200)
+async def clear_all_processed_emails_no_slash(db: Session = Depends(get_db)):
+    """Clear all processed email records (endpoint without trailing slash)"""
+    return await clear_all_processed_emails(db)
