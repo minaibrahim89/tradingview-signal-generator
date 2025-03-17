@@ -96,29 +96,49 @@ async def test_webhook(webhook_id: int, db: Session = Depends(get_db)):
     if webhook is None:
         raise HTTPException(status_code=404, detail="Webhook not found")
     
-    # Create a sample payload similar to what would be sent by the email processor
-    sample_payload = {
-        "body": "This is a test email body sent from the webhook testing feature.",
-        "subject": "Test Email for Webhook Configuration",
-        "sender": "test@example.com",
-        "timestamp": datetime.now().isoformat()
-    }
+    # Sample email body content
+    email_body = "This is a test email body sent from the webhook testing feature."
     
-    # Try to send the payload to the webhook
+    # Set headers based on content type
+    headers = {"Content-Type": webhook.content_type}
+    
+    # Prepare the payload
     success = False
     status_code = None
     response_text = None
+    sample_payload_str = ""
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                webhook.url,
-                json=sample_payload,
-                headers={"Content-Type": "application/json"}
-            ) as response:
-                status_code = response.status
-                response_text = await response.text()
-                success = status_code < 300
+            if webhook.send_raw_body:
+                # Send just the raw email body
+                data = email_body
+                sample_payload_str = email_body
+                async with session.post(
+                    webhook.url,
+                    data=data,
+                    headers=headers
+                ) as response:
+                    status_code = response.status
+                    response_text = await response.text()
+                    success = status_code < 300
+            else:
+                # Send structured JSON payload
+                json_payload = {
+                    "body": email_body,
+                    "subject": "Test Email for Webhook Configuration",
+                    "sender": "test@example.com",
+                    "timestamp": datetime.now().isoformat()
+                }
+                sample_payload_str = json.dumps(json_payload, indent=2)
+                async with session.post(
+                    webhook.url,
+                    json=json_payload,
+                    headers=headers
+                ) as response:
+                    status_code = response.status
+                    response_text = await response.text()
+                    success = status_code < 300
     except Exception as e:
         response_text = str(e)
     
@@ -128,7 +148,7 @@ async def test_webhook(webhook_id: int, db: Session = Depends(get_db)):
         "webhook_name": webhook.name,
         "status_code": status_code,
         "response": response_text,
-        "sample_payload": json.dumps(sample_payload, indent=2)
+        "sample_payload": sample_payload_str
     }
 
 

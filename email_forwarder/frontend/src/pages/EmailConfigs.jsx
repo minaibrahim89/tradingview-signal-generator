@@ -110,9 +110,28 @@ function EmailConfigs() {
     try {
       setLoading(true);
       
+      // Form validation
+      if (!formData.email_address || !formData.email_address.includes('@')) {
+        setSnackbar({
+          open: true,
+          message: 'Please enter a valid email address',
+          severity: 'error',
+        });
+        setLoading(false);
+        return;
+      }
+      
+      // Create a clean copy of the form data
+      const payload = {
+        ...formData,
+        // Convert empty strings to null
+        filter_subject: formData.filter_subject.trim() || null,
+        filter_sender: formData.filter_sender.trim() || null,
+      };
+      
       if (editingConfig) {
         // Update existing email config
-        await updateEmailConfig(editingConfig.id, formData);
+        await updateEmailConfig(editingConfig.id, payload);
         setSnackbar({
           open: true,
           message: 'Email configuration updated successfully!',
@@ -120,7 +139,7 @@ function EmailConfigs() {
         });
       } else {
         // Create new email config
-        await createEmailConfig(formData);
+        await createEmailConfig(payload);
         setSnackbar({
           open: true,
           message: 'Email configuration created successfully!',
@@ -133,9 +152,10 @@ function EmailConfigs() {
       handleCloseDialog();
     } catch (err) {
       console.error('Error saving email configuration:', err);
+      const errorMessage = err.response?.data?.detail || err.message;
       setSnackbar({
         open: true,
-        message: `Failed to ${editingConfig ? 'update' : 'create'} email configuration: ${err.message}`,
+        message: `Failed to ${editingConfig ? 'update' : 'create'} email configuration: ${errorMessage}`,
         severity: 'error',
       });
     } finally {

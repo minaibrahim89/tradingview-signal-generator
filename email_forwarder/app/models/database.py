@@ -3,6 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import datetime
 import os
+from sqlalchemy.sql import text
+from sqlalchemy import inspect
 
 # Create SQLite engine
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./email_forwarder.db")
@@ -19,6 +21,8 @@ class WebhookConfig(Base):
     name = Column(String(100), nullable=False)
     url = Column(String(500), nullable=False)
     active = Column(Boolean, default=True)
+    content_type = Column(String(100), default="application/json")
+    send_raw_body = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,
                         onupdate=datetime.datetime.utcnow)
@@ -62,3 +66,25 @@ def get_db():
 
 def initialize_db():
     Base.metadata.create_all(bind=engine)
+    
+    # Update schema if new columns are missing
+    try:
+        # Check if the webhook_configs table has the content_type column
+        conn = engine.connect()
+        inspector = inspect(engine)
+        columns = [col['name'] for col in inspector.get_columns('webhook_configs')]
+        
+        # Add missing columns if they don't exist
+        if 'content_type' not in columns:
+            conn.execute(text("ALTER TABLE webhook_configs ADD COLUMN content_type VARCHAR(100) DEFAULT 'application/json'"))
+            print("Added content_type column to webhook_configs table")
+            
+        if 'send_raw_body' not in columns:
+            conn.execute(text("ALTER TABLE webhook_configs ADD COLUMN send_raw_body BOOLEAN DEFAULT 0"))
+            print("Added send_raw_body column to webhook_configs table")
+            
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error updating schema: {e}")
+        # Continue even if the schema update fails

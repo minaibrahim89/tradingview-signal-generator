@@ -48,6 +48,8 @@ function Webhooks() {
     name: '',
     url: '',
     active: true,
+    content_type: 'application/json',
+    send_raw_body: false,
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -85,6 +87,8 @@ function Webhooks() {
         name: webhook.name,
         url: webhook.url,
         active: webhook.active,
+        content_type: webhook.content_type || 'application/json',
+        send_raw_body: webhook.send_raw_body || false,
       });
     } else {
       setEditingWebhook(null);
@@ -92,6 +96,8 @@ function Webhooks() {
         name: '',
         url: '',
         active: true,
+        content_type: 'application/json',
+        send_raw_body: false,
       });
     }
     setOpenDialog(true);
@@ -303,6 +309,8 @@ function Webhooks() {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>URL</TableCell>
+                <TableCell>Content Type</TableCell>
+                <TableCell>Mode</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -310,13 +318,13 @@ function Webhooks() {
             <TableBody>
               {loading && webhooks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
               ) : webhooks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                     <Typography color="text.secondary">
                       No webhooks configured yet. Click "Add Webhook" to create one.
                     </Typography>
@@ -327,6 +335,17 @@ function Webhooks() {
                   <TableRow key={webhook.id}>
                     <TableCell>{webhook.name}</TableCell>
                     <TableCell sx={{ wordBreak: 'break-all' }}>{webhook.url}</TableCell>
+                    <TableCell>{webhook.content_type || 'application/json'}</TableCell>
+                    <TableCell>
+                      <Typography
+                        sx={{
+                          color: webhook.send_raw_body ? 'info.main' : 'text.primary',
+                          fontWeight: 'medium',
+                        }}
+                      >
+                        {webhook.send_raw_body ? 'Raw Body' : 'JSON'}
+                      </Typography>
+                    </TableCell>
                     <TableCell>
                       <Typography
                         sx={{
@@ -409,6 +428,33 @@ function Webhooks() {
             helperText="The URL that will receive webhook data"
             sx={{ mb: 2 }}
           />
+          <TextField
+            margin="dense"
+            name="content_type"
+            label="Content Type"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={formData.content_type}
+            onChange={handleInputChange}
+            required
+            helperText="Content-Type header to use for webhook requests (e.g., application/json)"
+            sx={{ mb: 2 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.send_raw_body}
+                onChange={handleInputChange}
+                name="send_raw_body"
+              />
+            }
+            label="Send raw email body"
+            sx={{ mb: 1 }}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 3, mb: 2 }}>
+            When enabled, only the raw email body will be sent to the webhook instead of a JSON structure
+          </Typography>
           <FormControlLabel
             control={
               <Switch

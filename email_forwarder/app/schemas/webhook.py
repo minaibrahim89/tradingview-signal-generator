@@ -8,6 +8,8 @@ class WebhookBase(BaseModel):
                       description="Name of the webhook configuration")
     url: HttpUrl = Field(..., description="URL to forward email content to")
     active: bool = Field(True, description="Whether this webhook is active")
+    content_type: str = Field("application/json", description="Content type to use for webhook requests")
+    send_raw_body: bool = Field(False, description="Whether to send only the raw email body instead of a JSON structure")
 
 
 class WebhookCreate(WebhookBase):
@@ -21,6 +23,10 @@ class WebhookUpdate(BaseModel):
         None, description="URL to forward email content to")
     active: Optional[bool] = Field(
         None, description="Whether this webhook is active")
+    content_type: Optional[str] = Field(
+        None, description="Content type to use for webhook requests")
+    send_raw_body: Optional[bool] = Field(
+        None, description="Whether to send only the raw email body instead of a JSON structure")
 
 
 class WebhookInDB(WebhookBase):

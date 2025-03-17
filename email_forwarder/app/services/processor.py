@@ -437,19 +437,36 @@ class EmailProcessor:
         async with aiohttp.ClientSession() as session:
             for webhook in webhooks:
                 try:
-                    async with session.post(
-                        webhook.url,
-                        json=payload,
-                        headers={"Content-Type": "application/json"}
-                    ) as response:
-                        if response.status < 300:
-                            logger.info(
-                                f"Successfully forwarded email to webhook: {webhook.name}")
-                            success = True
-                        else:
-                            text = await response.text()
-                            logger.error(
-                                f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
+                    # Set headers with the webhook's content type
+                    headers = {"Content-Type": webhook.content_type}
+                    
+                    # Determine if we should send just the raw body or the JSON payload
+                    if webhook.send_raw_body:
+                        # Send just the raw email body
+                        async with session.post(
+                            webhook.url,
+                            data=body,
+                            headers=headers
+                        ) as response:
+                            if response.status < 300:
+                                logger.info(f"Successfully forwarded email to webhook: {webhook.name}")
+                                success = True
+                            else:
+                                text = await response.text()
+                                logger.error(f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
+                    else:
+                        # Send structured JSON payload
+                        async with session.post(
+                            webhook.url,
+                            json=payload,
+                            headers=headers
+                        ) as response:
+                            if response.status < 300:
+                                logger.info(f"Successfully forwarded email to webhook: {webhook.name}")
+                                success = True
+                            else:
+                                text = await response.text()
+                                logger.error(f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
                 except Exception as e:
                     logger.error(
                         f"Error sending to webhook {webhook.name}: {e}")

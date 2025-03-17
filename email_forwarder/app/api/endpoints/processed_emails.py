@@ -25,7 +25,14 @@ class ProcessedEmailResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/", response_model=dict)
+class PaginatedResponse(BaseModel):
+    data: List[ProcessedEmailResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+@router.get("/", response_model=PaginatedResponse)
 async def get_processed_emails(
     page: int = Query(0, ge=0),
     page_size: int = Query(10, ge=1, le=100),

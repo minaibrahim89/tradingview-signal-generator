@@ -44,26 +44,42 @@ function ProcessedEmails() {
   const fetchEmails = async () => {
     try {
       setLoading(true);
-      // Use the real API implementation
-      const res = await getProcessedEmails({ page, per_page: rowsPerPage });
       
-      // Ensure emails is always an array
-      if (res.data && Array.isArray(res.data)) {
-        setEmails(res.data);
-      } else if (res.data && Array.isArray(res.data.items)) {
-        // Some APIs nest the array under 'items' or similar property
-        setEmails(res.data.items);
+      console.log('Fetching emails with params:', { page, page_size: rowsPerPage });
+      
+      // Use the real API implementation
+      const response = await getProcessedEmails({ 
+        page,
+        page_size: rowsPerPage 
+      });
+      
+      console.log('API Response:', response);
+      
+      if (response && response.data) {
+        const responseData = response.data;
+        
+        // The backend returns { data: [...], total: number, page: number, page_size: number }
+        if (responseData.data && Array.isArray(responseData.data)) {
+          setEmails(responseData.data);
+          setTotalEmails(responseData.total || 0);
+          console.log('Successfully processed emails:', responseData.data.length);
+        } else {
+          console.error('Response data is not in expected format:', responseData);
+          setEmails([]);
+          setTotalEmails(0);
+        }
       } else {
-        console.error('API response is not in expected format:', res.data);
+        console.error('Invalid API response:', response);
         setEmails([]);
+        setTotalEmails(0);
       }
       
-      setTotalEmails(res.total || 0);
       setError(null);
     } catch (err) {
       console.error('Error fetching processed emails:', err);
       setError('Failed to load processed emails. Please try again.');
       setEmails([]);
+      setTotalEmails(0);
     } finally {
       setLoading(false);
     }

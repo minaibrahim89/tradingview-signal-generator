@@ -11,7 +11,14 @@ router = APIRouter()
 @router.post("/", response_model=EmailMonitorInDB, status_code=status.HTTP_201_CREATED)
 def create_email_config(config: EmailMonitorCreate, db: Session = Depends(get_db)):
     """Create a new email monitor configuration."""
-    db_config = EmailMonitorConfig(**config.dict())
+    # Convert empty strings to None
+    data = config.dict()
+    if "filter_subject" in data and data["filter_subject"] == "":
+        data["filter_subject"] = None
+    if "filter_sender" in data and data["filter_sender"] == "":
+        data["filter_sender"] = None
+        
+    db_config = EmailMonitorConfig(**data)
     db.add(db_config)
     db.commit()
     db.refresh(db_config)
@@ -52,6 +59,12 @@ def update_email_config(config_id: int, config: EmailMonitorUpdate, db: Session 
             status_code=404, detail="Email monitor configuration not found")
 
     update_data = config.dict(exclude_unset=True)
+    # Convert empty strings to None
+    if "filter_subject" in update_data and update_data["filter_subject"] == "":
+        update_data["filter_subject"] = None
+    if "filter_sender" in update_data and update_data["filter_sender"] == "":
+        update_data["filter_sender"] = None
+        
     for key, value in update_data.items():
         setattr(db_config, key, value)
 

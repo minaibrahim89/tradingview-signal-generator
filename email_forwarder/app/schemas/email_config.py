@@ -8,7 +8,7 @@ class EmailMonitorBase(BaseModel):
                                     description="Email address to monitor")
     filter_subject: Optional[str] = Field(
         None, description="Filter emails by subject (case-insensitive)")
-    filter_sender: Optional[EmailStr] = Field(
+    filter_sender: Optional[str] = Field(
         None, description="Filter emails by sender")
     check_interval_seconds: int = Field(
         60, ge=30, description="How often to check for new emails (in seconds)")
@@ -25,7 +25,7 @@ class EmailMonitorUpdate(BaseModel):
         None, description="Email address to monitor")
     filter_subject: Optional[str] = Field(
         None, description="Filter emails by subject (case-insensitive)")
-    filter_sender: Optional[EmailStr] = Field(
+    filter_sender: Optional[str] = Field(
         None, description="Filter emails by sender")
     check_interval_seconds: Optional[int] = Field(
         None, ge=30, description="How often to check for new emails (in seconds)")
