@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>WebSocket Test</title>
+        <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .error {
+            color: red;
+        }
+        .success {
+            color: green;
+        }
+        .info {
+            color: blue;
+        }
+        button {
+            margin-right: 10px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input {
+            padding: 8px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .endpoint {
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f5f5f5;
+        }
+    </style>
+    </head>
+    <body>
+        <h1>WebSocket Connection Test</h1>
+
+        <div class="endpoint">
+            <h2>Test Endpoint 1: Direct FastAPI WebSocket</h2>
+            <div>URL: <span id="url1">ws://localhost:8000/ws-test</span></div>
+            <button onclick="connect(1)">Connect</button>
+            <button onclick="disconnect(1)">Disconnect</button>
+            <button onclick="sendPing(1)">Send Ping</button>
+        </div>
+
+        <div class="endpoint">
+            <h2>Test Endpoint 2: Routed FastAPI WebSocket</h2>
+            <div>URL: <span
+                    id="url2">ws://localhost:8000/api/v1/ws/emails</span></div>
+            <button onclick="connect(2)">Connect</button>
+            <button onclick="disconnect(2)">Disconnect</button>
+            <button onclick="sendPing(2)">Send Ping</button>
+        </div>
+
+        <div class="endpoint">
+            <h2>Test Endpoint 3: Diagnostic Server</h2>
+            <div>URL: <span id="url3">ws://localhost:8765</span></div>
+            <button onclick="connect(3)">Connect</button>
+            <button onclick="disconnect(3)">Disconnect</button>
+            <button onclick="sendPing(3)">Send Ping</button>
+        </div>
+
+        <div class="endpoint">
+            <h2>Custom Endpoint</h2>
+            <input type="text" id="customUrl"
+                placeholder="Enter WebSocket URL..."
+                value="ws://localhost:8000/ws-test">
+            <button onclick="connectCustom()">Connect</button>
+            <button onclick="disconnectCustom()">Disconnect</button>
+            <button onclick="sendPingCustom()">Send Ping</button>
+        </div>
+
+        <h2>Message Log</h2>
+        <div id="log"></div>
+
+        <script>
+        let socket1 = null;
+        let socket2 = null;
+        let socket3 = null;
+        let socketCustom = null;
+        
+        function logMessage(message, type = 'info') {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.classList.add('log-entry', type);
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        function connect(endpointNum) {
+            const url = document.getElementById(`url${endpointNum}`).textContent;
+            try {
+                if (endpointNum === 1) {
+                    if (socket1) socket1.close();
+                    socket1 = new WebSocket(url);
+                    setupSocket(socket1, 1);
+                } else if (endpointNum === 2) {
+                    if (socket2) socket2.close();
+                    socket2 = new WebSocket(url);
+                    setupSocket(socket2, 2);
+                } else if (endpointNum === 3) {
+                    if (socket3) socket3.close();
+                    socket3 = new WebSocket(url);
+                    setupSocket(socket3, 3);
+                }
+                logMessage(`Connecting to endpoint ${endpointNum}: ${url}`, 'info');
+            } catch (error) {
+                logMessage(`Error creating connection to endpoint ${endpointNum}: ${error.message}`, 'error');
+            }
+        }
+        
+        function connectCustom() {
+            const url = document.getElementById('customUrl').value;
+            try {
+                if (socketCustom) socketCustom.close();
+                socketCustom = new WebSocket(url);
+                setupSocket(socketCustom, 'custom');
+                logMessage(`Connecting to custom endpoint: ${url}`, 'info');
+            } catch (error) {
+                logMessage(`Error creating connection to custom endpoint: ${error.message}`, 'error');
+            }
+        }
+        
+        function setupSocket(socket, id) {
+            socket.onopen = function(e) {
+                logMessage(`[${id}] Connection established`, 'success');
+            };
+            
+            socket.onmessage = function(event) {
+                logMessage(`[${id}] Data received: ${event.data}`, 'info');
+            };
+            
+            socket.onclose = function(event) {
+                if (event.wasClean) {
+                    logMessage(`[${id}] Connection closed cleanly, code=${event.code} reason=${event.reason}`, 'info');
+                } else {
+                    logMessage(`[${id}] Connection died`, 'error');
+                }
+            };
+            
+            socket.onerror = function(error) {
+                logMessage(`[${id}] Error: ${error.message}`, 'error');
+            };
+        }
+        
+        function disconnect(endpointNum) {
+            try {
+                if (endpointNum === 1 && socket1) {
+                    socket1.close();
+                    socket1 = null;
+                    logMessage(`Disconnected from endpoint 1`, 'info');
+                } else if (endpointNum === 2 && socket2) {
+                    socket2.close();
+                    socket2 = null;
+                    logMessage(`Disconnected from endpoint 2`, 'info');
+                } else if (endpointNum === 3 && socket3) {
+                    socket3.close();
+                    socket3 = null;
+                    logMessage(`Disconnected from endpoint 3`, 'info');
+                } else {
+                    logMessage(`Endpoint ${endpointNum} not connected`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error disconnecting from endpoint ${endpointNum}: ${error.message}`, 'error');
+            }
+        }
+        
+        function disconnectCustom() {
+            try {
+                if (socketCustom) {
+                    socketCustom.close();
+                    socketCustom = null;
+                    logMessage(`Disconnected from custom endpoint`, 'info');
+                } else {
+                    logMessage(`Custom endpoint not connected`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error disconnecting from custom endpoint: ${error.message}`, 'error');
+            }
+        }
+        
+        function sendPing(endpointNum) {
+            try {
+                const message = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+                if (endpointNum === 1 && socket1 && socket1.readyState === WebSocket.OPEN) {
+                    socket1.send(message);
+                    logMessage(`Sent ping to endpoint 1: ${message}`, 'info');
+                } else if (endpointNum === 2 && socket2 && socket2.readyState === WebSocket.OPEN) {
+                    socket2.send(message);
+                    logMessage(`Sent ping to endpoint 2: ${message}`, 'info');
+                } else if (endpointNum === 3 && socket3 && socket3.readyState === WebSocket.OPEN) {
+                    socket3.send(message);
+                    logMessage(`Sent ping to endpoint 3: ${message}`, 'info');
+                } else {
+                    logMessage(`Endpoint ${endpointNum} not connected or not ready`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error sending ping to endpoint ${endpointNum}: ${error.message}`, 'error');
+            }
+        }
+        
+        function sendPingCustom() {
+            try {
+                const message = JSON.stringify({ type: 'ping', timestamp: Date.now() });
+                if (socketCustom && socketCustom.readyState === WebSocket.OPEN) {
+                    socketCustom.send(message);
+                    logMessage(`Sent ping to custom endpoint: ${message}`, 'info');
+                } else {
+                    logMessage(`Custom endpoint not connected or not ready`, 'error');
+                }
+            } catch (error) {
+                logMessage(`Error sending ping to custom endpoint: ${error.message}`, 'error');
+            }
+        }
+    </script>
+    </body>
+</html>

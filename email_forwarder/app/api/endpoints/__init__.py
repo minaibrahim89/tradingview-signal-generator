@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.endpoints import webhooks, email_configs, processed_emails, stats, auth
+from app.api.endpoints import webhooks, email_configs, processed_emails, stats, auth, websocket
 import inspect
 
 router = APIRouter()
@@ -15,7 +15,8 @@ for module_name, module in [
     ("email_configs", email_configs),
     ("processed_emails", processed_emails),
     ("stats", stats), 
-    ("auth", auth)
+    ("auth", auth),
+    ("websocket", websocket)
 ]:
     print(f"Module {module_name}: {module}")
     if hasattr(module, "router"):
@@ -39,6 +40,7 @@ router.include_router(processed_emails.router,
                       prefix="/processed-emails", tags=["processed-emails"])
 router.include_router(stats.router, prefix="/stats", tags=["stats"])
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
+router.include_router(websocket.router, prefix="/ws", tags=["websocket"])
 
 # Print final router configuration
 print("="*80)

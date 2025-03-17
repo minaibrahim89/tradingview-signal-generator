@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 import platform
-from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,10 +10,12 @@ from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
+import json
 
 from app.api.endpoints import router as api_router
 from app.models.database import get_db, initialize_db
 from app.services.processor import EmailProcessor
+from app.api.endpoints.websocket import active_connections
 
 load_dotenv()
 
@@ -78,16 +80,24 @@ origins = [
     "http://localhost:8000",    # FastAPI server
     "http://127.0.0.1:5173",
     "http://127.0.0.1:8000",
+    # Include ws/wss variants for WebSocket connections
+    "ws://localhost:5173",
+    "ws://localhost:8000",
+    "ws://127.0.0.1:5173",
+    "ws://127.0.0.1:8000",
+    "wss://localhost:5173",
+    "wss://localhost:8000",
+    "wss://127.0.0.1:5173",
+    "wss://127.0.0.1:8000",
 ]
 
-# CORS setup with expanded settings
+# CORS setup - ensure WebSocket connections are properly handled
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # Allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Type", "Content-Length", "Content-Disposition"],
 )
 
 # Add GZip compression for responses
@@ -166,6 +176,152 @@ async def serve_frontend(request: Request, full_path: str):
     else:
         # If frontend is not built yet, redirect to API docs
         return RedirectResponse(url="/docs")
+
+
+# Add more robust debug middleware for WebSocket connections
+@app.middleware("http")
+async def debug_requests_middleware(request, call_next):
+    """Log all incoming requests, especially WebSocket connections"""
+    path = request.url.path
+    is_websocket = "upgrade" in request.headers.get("connection", "").lower(
+    ) and "websocket" in request.headers.get("upgrade", "").lower()
+
+    if is_websocket:
+        print(f"⚡ WebSocket upgrade request detected: {path}")
+        print(f"Headers: {request.headers}")
+
+    try:
+        response = await call_next(request)
+        if is_websocket:
+            if response.status_code == 101:
+                print(f"✅ WebSocket connection established: {path}")
+            else:
+                print(
+                    f"❌ WebSocket connection failed: {path} (Status: {response.status_code})")
+        return response
+    except Exception as e:
+        print(f"❌ Error processing request: {path} - {e}")
+        raise  # Re-raise so FastAPI can handle it
+
+
+# Add a direct WebSocket endpoint for testing
+@app.websocket("/ws-test")
+async def websocket_test(websocket: WebSocket):
+    print(
+        f"Direct WebSocket connection request from {websocket.client.host}:{websocket.client.port}")
+    await websocket.accept()
+    print("Direct WebSocket connection accepted")
+
+    # Send welcome message
+    await websocket.send_text(json.dumps({
+        "type": "connection_status",
+        "status": "connected",
+        "message": "Direct WebSocket connection established"
+    }))
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(f"Received message: {data}")
+
+            # Echo back the message
+            await websocket.send_text(json.dumps({
+                "type": "echo",
+                "data": data
+            }))
+    except WebSocketDisconnect:
+        print("Direct WebSocket client disconnected")
+
+
+# Add a direct WebSocket endpoint for the API route path as well
+@app.websocket("/api/v1/ws/emails")
+async def websocket_emails_direct(websocket: WebSocket):
+    print(
+        f"Direct API WebSocket connection request from {websocket.client.host}:{websocket.client.port}")
+    await websocket.accept()
+    print("Direct API WebSocket connection accepted")
+
+    # Send welcome message
+    await websocket.send_text(json.dumps({
+        "type": "connection_status",
+        "status": "connected",
+        "message": "Direct API WebSocket connection established"
+    }))
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(f"Received API WebSocket message: {data}")
+
+            # Echo back the message
+            try:
+                message = json.loads(data)
+                if message.get("type") == "ping":
+                    await websocket.send_text(json.dumps({
+                        "type": "pong",
+                        "timestamp": "now"
+                    }))
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "echo",
+                        "data": data
+                    }))
+            except Exception as e:
+                print(f"Error processing API WebSocket message: {e}")
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": str(e)
+                }))
+    except WebSocketDisconnect:
+        print("Direct API WebSocket client disconnected")
+    except Exception as e:
+        print(f"API WebSocket error: {e}")
+
+
+# Add a simple WebSocket endpoint at the root path for testing
+@app.websocket("/ws")
+async def root_websocket_test(websocket: WebSocket):
+    """WebSocket endpoint at the root path for basic connectivity testing"""
+    print(
+        f"Root WebSocket connection request from {websocket.client.host}:{websocket.client.port}")
+    await websocket.accept()
+    print("Root WebSocket connection accepted")
+
+    # Send welcome message
+    await websocket.send_text(json.dumps({
+        "type": "connection_status",
+        "status": "connected",
+        "message": "Root WebSocket connection established"
+    }))
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(f"Received root WebSocket message: {data}")
+
+            # Echo back the message
+            try:
+                message = json.loads(data)
+                if message.get("type") == "ping":
+                    await websocket.send_text(json.dumps({
+                        "type": "pong",
+                        "timestamp": "now"
+                    }))
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "echo",
+                        "data": data
+                    }))
+            except Exception as e:
+                print(f"Error processing root WebSocket message: {e}")
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": str(e)
+                }))
+    except WebSocketDisconnect:
+        print("Root WebSocket client disconnected")
+    except Exception as e:
+        print(f"Root WebSocket error: {e}")
 
 
 if __name__ == "__main__":

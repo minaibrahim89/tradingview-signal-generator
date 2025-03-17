@@ -13,6 +13,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 from app.models.database import EmailMonitorConfig, WebhookConfig, ProcessedEmail
+from app.api.endpoints.websocket import broadcast_email_processed
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -387,11 +388,52 @@ class EmailProcessor:
                 )
                 db.add(processed)
                 db.commit()
+                db.refresh(processed)
 
                 # Add to in-memory set
                 self._processed_ids.add(message_id)
 
                 logger.info(f"Processed email: {subject} from {sender}")
+
+                # Broadcast to WebSocket clients
+                try:
+                    # Convert SQLAlchemy model to dict for WebSocket broadcast
+                    email_dict = {
+                        "id": processed.id,
+                        "message_id": processed.message_id,
+                        "sender": processed.sender,
+                        "subject": processed.subject,
+                        "received_at": processed.received_at.isoformat() if processed.received_at else None,
+                        "processed_at": processed.processed_at.isoformat() if processed.processed_at else None,
+                        "forwarded_successfully": processed.forwarded_successfully,
+                        "body_snippet": processed.body_snippet
+                    }
+
+                    # Create a background task to broadcast the email
+                    # This ensures the broadcast happens without blocking the main processing
+                    broadcast_task = asyncio.create_task(
+                        broadcast_email_processed(email_dict))
+
+                    # Add logging to track task completion
+                    async def log_broadcast_completion(task):
+                        try:
+                            await task
+                            logger.info(
+                                f"WebSocket broadcast completed for email: {subject}")
+                        except Exception as e:
+                            logger.error(
+                                f"WebSocket broadcast task failed: {e}")
+
+                    # Add callback to log completion
+                    broadcast_task.add_done_callback(
+                        lambda _: asyncio.create_task(
+                            log_broadcast_completion(broadcast_task))
+                    )
+
+                    logger.info(
+                        f"WebSocket broadcast scheduled for email: {subject}")
+                except Exception as e:
+                    logger.error(f"Error scheduling WebSocket broadcast: {e}")
 
         except Exception as e:
             logger.error(f"Error checking emails: {e}")
@@ -439,7 +481,7 @@ class EmailProcessor:
                 try:
                     # Set headers with the webhook's content type
                     headers = {"Content-Type": webhook.content_type}
-                    
+
                     # Determine if we should send just the raw body or the JSON payload
                     if webhook.send_raw_body:
                         # Send just the raw email body
@@ -449,11 +491,13 @@ class EmailProcessor:
                             headers=headers
                         ) as response:
                             if response.status < 300:
-                                logger.info(f"Successfully forwarded email to webhook: {webhook.name}")
+                                logger.info(
+                                    f"Successfully forwarded email to webhook: {webhook.name}")
                                 success = True
                             else:
                                 text = await response.text()
-                                logger.error(f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
+                                logger.error(
+                                    f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
                     else:
                         # Send structured JSON payload
                         async with session.post(
@@ -462,11 +506,13 @@ class EmailProcessor:
                             headers=headers
                         ) as response:
                             if response.status < 300:
-                                logger.info(f"Successfully forwarded email to webhook: {webhook.name}")
+                                logger.info(
+                                    f"Successfully forwarded email to webhook: {webhook.name}")
                                 success = True
                             else:
                                 text = await response.text()
-                                logger.error(f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
+                                logger.error(
+                                    f"Failed to forward email to webhook {webhook.name}: Status {response.status}, Response: {text}")
                 except Exception as e:
                     logger.error(
                         f"Error sending to webhook {webhook.name}: {e}")

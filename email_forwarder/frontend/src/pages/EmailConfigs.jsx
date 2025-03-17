@@ -352,8 +352,8 @@ function EmailConfigs() {
               type="number"
               value={formData.check_interval_seconds}
               onChange={handleInputChange}
-              inputProps={{ min: 30 }}
-              helperText="How often to check for new emails (minimum 30 seconds)"
+              inputProps={{ min: 1 }}
+              helperText="How often to check for new emails (minimum 1 second)"
             />
             <FormControlLabel
               control={
@@ -379,7 +379,7 @@ function EmailConfigs() {
             disabled={
               loading || 
               !formData.email_address || 
-              formData.check_interval_seconds < 30
+              formData.check_interval_seconds < 1
             }
           >
             {loading ? <CircularProgress size={24} /> : 'Save'}

@@ -11,7 +11,7 @@ class EmailMonitorBase(BaseModel):
     filter_sender: Optional[str] = Field(
         None, description="Filter emails by sender")
     check_interval_seconds: int = Field(
-        60, ge=30, description="How often to check for new emails (in seconds)")
+        60, ge=1, description="How often to check for new emails (in seconds)")
     active: bool = Field(
         True, description="Whether this monitor configuration is active")
 
@@ -28,7 +28,7 @@ class EmailMonitorUpdate(BaseModel):
     filter_sender: Optional[str] = Field(
         None, description="Filter emails by sender")
     check_interval_seconds: Optional[int] = Field(
-        None, ge=30, description="How often to check for new emails (in seconds)")
+        None, ge=1, description="How often to check for new emails (in seconds)")
     active: Optional[bool] = Field(
         None, description="Whether this monitor configuration is active")
 
