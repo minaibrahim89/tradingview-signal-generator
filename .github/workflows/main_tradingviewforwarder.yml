@@ -59,7 +59,7 @@ jobs:
 
       - name: Zip artifact for deployment
         run: |
-          zip -r release.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.pyo" "*.pyd" ".git/*" ".github/*" ".vscode/*" "*.log" ".pytest_cache/*" "node_modules/*" "*.db" "frontend/node_modules/*" "static/*"
+          zip -r release.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.pyo" "*.pyd" ".git/*" ".github/*" ".vscode/*" "*.log" ".pytest_cache/*" "node_modules/*" "*.db" "frontend/node_modules/*" "static/*" "output.tar.gz"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -86,8 +86,11 @@ jobs:
         with:
           name: python-app
 
+      - name: Remove any existing output.tar.gz before unzipping
+        run: rm -f output.tar.gz || true
+
       - name: Unzip artifact for deployment
-        run: unzip release.zip
+        run: unzip -o release.zip
 
       - name: Run deployment preparation script
         run: |
