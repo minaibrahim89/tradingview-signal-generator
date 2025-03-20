@@ -1,60 +1,50 @@
 # Azure Deployment Guide
 
-This application is designed to be deployed to Azure App Service. Follow these steps to troubleshoot deployment issues:
+This guide explains the simplified deployment process for the Trading View Signal Generator application on Azure Web App.
 
-## Deployment Files
+## Key Files
 
-The most critical files for Azure deployment are:
+- **web.config**: Tells Azure how to start your application
+- **startup.sh**: Main script that starts your application
+- **deploy.sh**: Handles deployment tasks
+- **cleanup.sh**: Removes any tar.gz files
+- **.deployment**: Configuration for Azure Kudu deployment engine
+- **diagnostic.py**: Helps diagnose deployment issues
 
-1. **web.config** - Instructs Azure how to start the application
-2. **startup.sh** - The script that boots the application
-3. **deploy.sh** - Prepares files during deployment
+## Deployment Flow
 
-## Troubleshooting Steps
+1. **GitHub Actions** builds the application and packages it for deployment
+2. The package is uploaded to Azure Web App
+3. `.deployment` file tells Azure to run `deploy.sh`
+4. `deploy.sh` handles initial setup
+5. `web.config` tells Azure to use `startup.sh` for running the application
+6. `startup.sh` runs `cleanup.sh` and then starts the web server
+7. `cleanup.sh` removes any leftover tar.gz files
 
-If you're seeing the default Azure welcome page, it means the application is not starting correctly. Try these steps:
+## Troubleshooting
 
-1. In the Azure Portal, go to your App Service
-2. Navigate to **Development Tools** > **Advanced Tools** > **Go** (Kudu)
-3. Click on **Debug Console** > **CMD** or **PowerShell**
-4. Navigate to `site/wwwroot`
-5. Check if all files were deployed correctly:
-   ```
-   dir
-   ```
-   
-6. Verify the startup script is executable:
-   ```
-   chmod +x startup.sh
-   ```
-   
-7. Check application logs:
-   ```
-   cat /home/LogFiles/stdout.log
-   ```
-   
-8. Also check for the debug log:
-   ```
-   cat azure-debug.log
-   ```
+If the application doesn't deploy correctly:
+
+1. **Check logs**: Navigate to your Azure Web App → Log stream
+2. **Run diagnostic script**: SSH into your Web App and run `python diagnostic.py`
+3. **Verify files**: Ensure all key files exist in `/home/site/wwwroot/`
+4. **Check for tar.gz files**: Make sure no tar.gz files exist in the wwwroot directory
+5. **Restart the app**: Try restarting the web app from the Azure portal
 
 ## Manual Deployment
 
-If GitHub Actions deployment is failing, you can deploy manually:
+If GitHub Actions doesn't work, you can deploy manually:
 
-1. Build the application locally:
-   ```
-   cd frontend
-   npm run build
-   cd ..
-   ```
-   
-2. Zip all files (excluding node_modules, etc.)
-   
-3. Upload via Kudu console or using the Azure CLI:
-   ```
-   az webapp deployment source config-zip --resource-group <group-name> --name <app-name> --src <zip-file>
-   ```
+1. Build the application locally
+2. Zip the entire application directory
+3. Deploy through the Azure portal using the "Deploy from ZIP" option
+
+## Important Notes
+
+- The application is hosted in `/home/site/wwwroot/` on Azure
+- Static files are served from the `static` directory
+- The startup script automatically creates a static directory if missing
+- The cleanup script is crucial for removing any leftover tar.gz files that might interfere with proper operation
 
 ## Configuration
 
