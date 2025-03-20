@@ -14,6 +14,7 @@ from google.auth.transport.requests import Request
 
 from app.models.database import EmailMonitorConfig, WebhookConfig, ProcessedEmail
 from app.api.endpoints.websocket import broadcast_email_processed
+from app.services.credential_utils import get_google_credentials_data
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -63,32 +64,51 @@ class EmailProcessor:
             credentials = None
 
             logger.info(f"Looking for token at: {self.token_path}")
-            logger.info(f"Looking for credentials at: {self.credentials_path}")
-
-            # First, check if credentials file exists
-            if not os.path.exists(self.credentials_path):
-                logger.error(
-                    f"Credentials file not found at {self.credentials_path}")
+            
+            # Load stored credentials token if it exists
+            if os.path.exists(self.token_path):
+                try:
+                    credentials = self._load_token_file()
+                    # Check if the credentials are valid or if they need to be refreshed
+                    if credentials and credentials.expired and credentials.refresh_token:
+                        logger.info("Refreshing expired credentials")
+                        try:
+                            credentials.refresh(Request())
+                            # Save the refreshed credentials
+                            self._save_credentials(credentials)
+                        except Exception as refresh_error:
+                            logger.error(f"Error refreshing credentials: {refresh_error}")
+                            credentials = await self._handle_invalid_credentials(credentials)
+                    return credentials
+                except Exception as e:
+                    logger.error(f"Error loading token file: {e}")
+                    # Continue to the OAuth flow
+            
+            # If no valid token exists, perform OAuth flow
+            # First, check if credentials can be loaded from environment or file
+            
+            creds_data = get_google_credentials_data()
+            if not creds_data:
                 self._show_credentials_error()
                 return None
-
-            # Try to load existing token
-            if os.path.exists(self.token_path):
-                credentials = self._load_token_file()
-
-            # If no valid credentials available, let the user log in
-            if not credentials or not credentials.valid:
-                credentials = await self._handle_invalid_credentials(credentials)
-
-            # Save the credentials for the next run
-            if credentials:
-                self._save_credentials(credentials)
-
-            return credentials
+                
+            # Verify it's a desktop client type
+            installed = creds_data.get('installed', None)
+            if not installed:
+                logger.error("Invalid credentials: Not a desktop app client type")
+                print("Invalid credentials.json: Not a desktop app client type")
+                print("\nERROR: Your credentials.json file is not for a desktop application.")
+                self._show_oauth_troubleshooting()
+                return None
+                
+            # Perform the OAuth flow to get credentials
+            return await self._perform_oauth_flow()
+                
         except Exception as e:
-            logger.error(f"Error getting credentials: {e}")
+            logger.error(f"Failed to get credentials: {e}")
+            print(f"\nError getting credentials: {e}")
             return None
-
+            
     def _show_credentials_error(self):
         """Show error message for missing credentials file."""
         print(
@@ -134,26 +154,22 @@ class EmailProcessor:
         return await self._perform_oauth_flow()
 
     async def _perform_oauth_flow(self):
-        """Perform the OAuth flow to get new credentials."""
+        """Perform the OAuth flow to get credentials."""
         try:
-            # Verify credentials.json is valid
-            with open(self.credentials_path, 'r') as f:
-                client_info = json.load(f)
-
-            if 'installed' not in client_info:
-                logger.error(
-                    "Invalid credentials.json: Not a desktop app client type")
-                print(
-                    "\nERROR: Your credentials.json file is not for a desktop application.")
-                print(
-                    "Please create OAuth credentials with application type 'Desktop app'.")
+            creds_data = get_google_credentials_data()
+            if not creds_data:
                 return None
-
+                
+            # Create a flow using the credentials data
+            flow = InstalledAppFlow.from_client_config(
+                creds_data,
+                scopes=['https://www.googleapis.com/auth/gmail.readonly']
+            )
+            
+            # Rest of the method remains unchanged
             logger.info("Starting OAuth flow for user consent")
 
             # Configure flow with specific settings
-            flow = InstalledAppFlow.from_client_secrets_file(
-                self.credentials_path, SCOPES)
             flow.redirect_uri = "http://localhost"
 
             # Determine authentication method

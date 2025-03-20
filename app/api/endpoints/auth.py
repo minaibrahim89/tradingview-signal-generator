@@ -5,6 +5,7 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Optional
 from pydantic import BaseModel
+from app.services.credential_utils import get_google_credentials_data
 
 router = APIRouter()
 
@@ -26,7 +27,9 @@ class AuthStatus(BaseModel):
 @router.get("/status", response_model=AuthStatus)
 async def get_auth_status():
     """Get the current authentication status"""
-    credentials_exist = os.path.exists(CREDENTIALS_PATH)
+    # Check for credentials in environment variable or file
+    creds_data = get_google_credentials_data()
+    credentials_exist = creds_data is not None
     token_exists = os.path.exists(TOKEN_PATH)
 
     email = None

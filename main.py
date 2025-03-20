@@ -126,6 +126,10 @@ async def health_check():
 
     token_path = os.getenv("GMAIL_TOKEN_PATH", "token.json")
     credentials_path = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
+    
+    # Check for credentials in environment variable
+    has_env_credentials = "GOOGLE_CREDENTIALS_BASE64" in os.environ
+    has_file_credentials = os.path.exists(credentials_path)
 
     return {
         "status": "ok",
@@ -137,7 +141,8 @@ async def health_check():
         "email_processor_active": email_processor._running,
         "auth_status": {
             "token_exists": os.path.exists(token_path),
-            "credentials_exist": os.path.exists(credentials_path)
+            "credentials_exist": has_file_credentials or has_env_credentials,
+            "credentials_source": "environment" if has_env_credentials else "file" if has_file_credentials else "none"
         }
     }
 
