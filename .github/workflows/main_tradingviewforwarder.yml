@@ -50,20 +50,21 @@ jobs:
             echo "Static directory not found!"
           fi
           
-      # Create static.tar.gz for easier deployment
+      # Package static files for deployment but don't rely on runtime extraction
       - name: Package static files
         run: |
           if [ -d "static" ]; then
-            # Remove previous output.tar.gz if exists
-            rm -f output.tar.gz
-            # Create the new archive
-            tar -czf static.tar.gz -C static .
-            mv static.tar.gz output.tar.gz
-            echo "Static files packaged successfully"
-            ls -la output.tar.gz
+            echo "Preparing static files for deployment"
+            
+            # Create a separate archive for reference/backup
+            tar -czf static_backup.tar.gz -C static .
+            
+            # Don't use output.tar.gz anymore as it causes issues
+            echo "Not using output.tar.gz for deployment anymore"
           else
             echo "Warning: static directory not found"
-            ls -la
+            mkdir -p static
+            echo "Created empty static directory"
           fi
       
       - name: Install dependencies
@@ -109,34 +110,46 @@ jobs:
             echo '</configuration>' >> web.config
           fi
 
-      - name: Zip artifact for deployment
+      - name: Prepare deployment package
         run: |
-          # Create a clean directory for deployment files
-          mkdir -p deploy
+          # Create a clean directory structure for deployment
+          mkdir -p app_deploy
           
-          # Copy files to deployment directory
-          cp -r *.py *.sh *.json *.txt web.config .env requirements.txt deploy/
-          cp -r app deploy/
+          # Copy application files
+          cp -r *.py *.sh *.json *.txt web.config .env requirements.txt app_deploy/
+          cp -r app app_deploy/
           
-          # Don't include output.tar.gz in the zip
-          # We'll upload it separately
+          # Copy static files directly (not as tar.gz)
+          mkdir -p app_deploy/static
+          if [ -d "static" ] && [ "$(ls -A static)" ]; then
+            cp -r static/* app_deploy/static/
+            echo "Static files copied directly to deployment package"
+          else
+            echo "No static files to copy"
+            # Create a placeholder index.html
+            mkdir -p app_deploy/static
+            echo '<html><body><h1>App is running</h1><p>Static files were not available during deployment.</p></body></html>' > app_deploy/static/index.html
+          fi
           
-          # Create the deployment zip
-          cd deploy
-          zip -r ../release.zip .
+          # Add verification file
+          echo "Static files deployed directly at $(date)" > app_deploy/static/direct_deployment.txt
+          
+          # Create verification files
+          echo "Deployment prepared at $(date)" > app_deploy/deployment_verification.txt
+          echo "Files in deployment:" >> app_deploy/deployment_verification.txt
+          ls -la app_deploy/ >> app_deploy/deployment_verification.txt
+          
+          # Create the deployment zip for artifact (not needed for actual deployment)
+          cd app_deploy
+          zip -r ../deployment.zip .
           cd ..
-          
-          # Verify the zip was created
-          ls -la release.zip
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            release.zip
-            output.tar.gz
-            !venv/
+          path: app_deploy
+          if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
@@ -153,34 +166,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
+          path: app_deploy
 
-      - name: Unzip artifact for deployment
+      - name: Verify deployment package
         run: |
-          # Create a clean directory for deployment
-          mkdir -p app_deploy
-          cd app_deploy
+          echo "Checking deployment package contents:"
+          ls -la app_deploy
           
-          # Unzip the release.zip file
-          unzip -o ../release.zip
-          
-          # Move output.tar.gz to the deployment directory
-          if [ -f "../output.tar.gz" ]; then
-            cp ../output.tar.gz .
-            echo "output.tar.gz copied to deployment directory"
+          # Verify static directory
+          if [ -d "app_deploy/static" ]; then
+            echo "Static directory exists and contains:"
+            ls -la app_deploy/static
           else
-            echo "WARNING: output.tar.gz not found!"
+            echo "ERROR: Static directory is missing!"
           fi
           
-          # List contents to verify
-          echo "Deployment directory contents:"
-          ls -la
+          # Make scripts executable
+          chmod +x app_deploy/*.sh
+          
+          # No need to run deploy.sh since files are already extracted
+          echo "Static files are already extracted in the package"
 
-      - name: Run deployment preparation script
-        run: |
-          cd app_deploy
-          chmod +x *.sh
-          ./deploy.sh
-      
       - name: Login to Azure
         uses: azure/login@v2
         with:

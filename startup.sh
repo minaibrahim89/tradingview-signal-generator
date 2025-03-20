@@ -7,64 +7,23 @@ echo "Current directory: $(pwd)"
 echo "Directory contents:"
 ls -la
 
-# Check if we have a deployment marker
-if [ -f "deployment_complete.txt" ]; then
-  echo "Deployment marker found, deployment script ran successfully"
-else
-  echo "WARNING: Deployment marker not found, deployment script might not have run!"
-fi
-
-# Check for any issues with output.tar.gz
-if [ -f "output.tar.gz" ]; then
-  echo "WARNING: output.tar.gz found in root directory - deploy.sh didn't run properly"
-  echo "Attempting emergency extraction of static files..."
-  rm -rf static
-  mkdir -p static
-  tar -xzf output.tar.gz -C static
-  rm -f output.tar.gz
-  echo "Emergency extraction completed"
-fi
-
-# Check if static directory exists and has content
+# Log static directory information
+echo "Checking static directory:"
 if [ -d "static" ]; then
-  echo "Static directory exists:"
+  echo "Static directory exists and contains:"
   ls -la static/
   
-  # Check if index.html exists
-  if [ -f "static/index.html" ]; then
-    echo "static/index.html found"
+  # Check deployment verification file
+  if [ -f "static/direct_deployment.txt" ]; then
+    echo "Static files were deployed directly via GitHub Actions"
+    cat static/direct_deployment.txt
   else
-    echo "WARNING: static/index.html not found, creating a placeholder"
-    cat > static/index.html << 'EOL'
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>App Status</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-    h1 { color: #333; }
-    .card { border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-  </style>
-</head>
-<body>
-  <h1>Application Status</h1>
-  <div class="card">
-    <h2>Server is running!</h2>
-    <p>This is a placeholder page generated during startup.</p>
-    <p>Try accessing the API directly at <a href="/api/v1/webhooks/">/api/v1/webhooks/</a></p>
-    <p>For API documentation, visit <a href="/docs">/docs</a></p>
-    <p>For application health status, check <a href="/health">/health</a></p>
-  </div>
-  <p>Server time: <script>document.write(new Date().toISOString())</script></p>
-</body>
-</html>
-EOL
+    echo "No direct deployment verification found"
   fi
 else
-  echo "Static directory does not exist, creating it"
+  echo "WARNING: Static directory is missing, creating it now"
   mkdir -p static
+  echo "Created static directory"
   
   # Create a simple placeholder index.html
   cat > static/index.html << 'EOL'
@@ -73,7 +32,7 @@ else
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>App Status - Static Directory Missing</title>
+  <title>App Status - Emergency Recovery</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
     h1 { color: #333; }
@@ -86,7 +45,7 @@ else
   <div class="card warning">
     <h2>Warning: Static Directory Missing</h2>
     <p>The static directory was missing and has been created during startup.</p>
-    <p>This may indicate a deployment issue with the frontend files.</p>
+    <p>This is an emergency recovery page.</p>
   </div>
   <div class="card">
     <h2>API Server is running</h2>
@@ -96,10 +55,11 @@ else
     <p>For application health status, check <a href="/health">/health</a></p>
   </div>
   <p>Server time: <script>document.write(new Date().toISOString())</script></p>
-  <p>Server started at: <script>document.write(new Date('$(date -u +"%Y-%m-%dT%H:%M:%SZ")').toLocaleString())</script></p>
+  <p>Server started at: <script>document.write(new Date().toLocaleString())</script></p>
 </body>
 </html>
 EOL
+  echo "Created emergency placeholder index.html"
 fi
 
 # Install dependencies
@@ -137,6 +97,11 @@ echo "Python version: $(python --version)"
 echo "System: $(uname -a)"
 echo "Memory: $(free -h || echo 'free command not available')"
 echo "Disk space: $(df -h . || echo 'df command not available')"
+
+# Create a startup verification file
+echo "Application started at $(date)" > startup_verification.txt
+echo "Running as: $(whoami)" >> startup_verification.txt
+echo "In directory: $(pwd)" >> startup_verification.txt
 
 # Run Gunicorn for production on Azure
 echo "Starting Gunicorn on 0.0.0.0:$PORT"
