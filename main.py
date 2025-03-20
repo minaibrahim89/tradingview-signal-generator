@@ -108,6 +108,10 @@ app.include_router(api_router, prefix="/api/v1")
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    # Also mount assets at /assets for direct access
+    assets_dir = os.path.join(static_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets_direct")
 
 
 # Add a test endpoint to verify API connectivity
@@ -145,6 +149,12 @@ async def health_check():
             "credentials_source": "environment" if has_env_credentials else "file" if has_file_credentials else "none"
         }
     }
+
+
+# Serve favicon.ico from the static directory
+@app.get("/favicon.ico")
+async def favicon():
+    return FileResponse(os.path.join(static_dir, "favicon.ico"))
 
 
 # Serve frontend
@@ -205,4 +215,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Get port from environment variable or use default 8000
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting development server on port {port}")
+    # Only run the development server when script is executed directly
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

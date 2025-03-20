@@ -9,11 +9,16 @@ find . -type f -name "*.sh" -exec dos2unix {} \;
 
 # Extract static files if archive exists
 if [ -f "output.tar.gz" ]; then
-  echo "Extracting static files..."
+  echo "Extracting static files during deployment..."
   mkdir -p static
   tar -xzf output.tar.gz -C static
-  rm output.tar.gz
+  echo "Static files extracted successfully"
+  # Don't remove the archive - we'll keep it for the startup script as a backup
 fi
+
+# Create .env file with debug setting
+echo "Creating .env file with debug settings..."
+echo "DEBUG=True" > .env
 
 echo "Deployment script completed"
 exit 0 
