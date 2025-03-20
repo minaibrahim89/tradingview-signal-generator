@@ -5,6 +5,11 @@
 echo "Creating marker file for Azure deployment"
 touch deployment_complete.txt
 
+# Debug information
+echo "Current directory: $(pwd)"
+echo "Directory contents:"
+ls -la
+
 # Ensure scripts are executable
 chmod +x startup.sh
 
@@ -20,10 +25,61 @@ fi
 # Extract static files if archive exists
 if [ -f "output.tar.gz" ]; then
   echo "Extracting static files during deployment..."
+  
+  # Remove any existing static directory to start clean
+  rm -rf static
+  
+  # Create static directory
   mkdir -p static
+  
+  # Extract the archive
   tar -xzf output.tar.gz -C static
   echo "Static files extracted successfully"
-  # Don't remove the archive - we'll keep it for the startup script as a backup
+  echo "Static directory contents:"
+  ls -la static/
+  
+  # Create a verification file in the static directory
+  echo "Static files were extracted at $(date)" > static/extraction_verified.txt
+  
+  # Remove the archive after extraction
+  echo "Removing output.tar.gz after extraction"
+  rm -f output.tar.gz
+else
+  echo "WARNING: output.tar.gz not found!"
+  # Create a minimal static directory
+  mkdir -p static
+  echo "Created minimal static directory"
+  
+  # Create a simple placeholder
+  cat > static/index.html << 'EOL'
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Server</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
+    h1 { color: #333; }
+    .card { border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>API Server Running</h1>
+  <div class="card">
+    <h2>Static files not found</h2>
+    <p>The API server is running but the frontend static files were not found.</p>
+    <p>You can access the API at:</p>
+    <ul>
+      <li><a href="/api/v1/webhooks/">/api/v1/webhooks/</a></li>
+      <li><a href="/health">/health</a> (health check endpoint)</li>
+      <li><a href="/docs">/docs</a> (API documentation)</li>
+    </ul>
+  </div>
+  <p>Server time: <script>document.write(new Date().toISOString())</script></p>
+</body>
+</html>
+EOL
 fi
 
 # Create simple test app for diagnostics
@@ -62,5 +118,18 @@ echo "Creating .env file with debug settings..."
 echo "DEBUG=True" > .env
 echo "CORS_ORIGIN=*" >> .env
 
+# Create a startup_command.txt file
+echo "Creating startup command file..."
+echo "gunicorn main:app --bind=0.0.0.0:\$PORT --worker-class=uvicorn.workers.UvicornWorker --timeout 600 --workers 4" > startup_command.txt
+
+# Ensure static directory is properly configured for FastAPI
+echo "Checking if main.py mounts static directory..."
+if grep -q "app.mount(\"/static\"" main.py; then
+  echo "Static directory is mounted in main.py"
+else
+  echo "WARNING: Static directory might not be mounted in main.py"
+fi
+
 echo "Deployment script completed"
+ls -la
 exit 0 

@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 import json
+import datetime
 
 from app.api.endpoints import router as api_router
 from app.models.database import get_db, initialize_db
@@ -121,22 +122,24 @@ async def test_api():
     return JSONResponse(content={"status": "ok", "message": "API is working correctly"})
 
 
+# Add a health check endpoint
 @app.get("/health")
 async def health_check():
-    """Enhanced health check endpoint for monitoring."""
-    # Get system info
-    python_version = sys.version.split()[0]
+    """Health check endpoint for monitoring."""
+    # Get version info
+    python_version = sys.version
     os_info = f"{platform.system()} {platform.release()}"
-
-    token_path = os.getenv("GMAIL_TOKEN_PATH", "token.json")
-    credentials_path = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
     
-    # Check for credentials in environment variable
-    has_env_credentials = "GOOGLE_CREDENTIALS_BASE64" in os.environ
-    has_file_credentials = os.path.exists(credentials_path)
-
+    # Get token path for authorization check
+    token_path = os.path.join(os.path.dirname(__file__), "token.json")
+    
+    # Check credentials
+    has_file_credentials = os.path.exists(os.path.join(os.path.dirname(__file__), "credentials.json"))
+    has_env_credentials = all(k in os.environ for k in ["CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN"])
+    
     return {
-        "status": "ok",
+        "status": "healthy",
+        "timestamp": datetime.datetime.now().isoformat(),
         "version": "1.0.0",
         "environment": {
             "python_version": python_version,
@@ -172,7 +175,11 @@ async def root():
 # Serve favicon.ico from the static directory
 @app.get("/favicon.ico")
 async def favicon():
-    return FileResponse(os.path.join(static_dir, "favicon.ico"))
+    favicon_path = os.path.join(static_dir, "favicon.ico")
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    else:
+        raise HTTPException(status_code=404, detail="Favicon not found")
 
 
 # Serve frontend

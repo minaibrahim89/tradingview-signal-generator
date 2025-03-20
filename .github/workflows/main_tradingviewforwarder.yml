@@ -41,6 +41,15 @@ jobs:
           npm run build
           cd ..
           
+      - name: List static directory contents
+        run: |
+          echo "Static directory contents:"
+          if [ -d "static" ]; then
+            ls -la static
+          else
+            echo "Static directory not found!"
+          fi
+          
       # Create static.tar.gz for easier deployment
       - name: Package static files
         run: |
@@ -73,16 +82,52 @@ jobs:
           echo "DEBUG=False" > .env
           echo "CORS_ORIGIN=*" >> .env
           
-          # Create empty static dir if it doesn't exist
-          mkdir -p static
-          
           # Create Azure deployment markers
           echo "App deployment timestamp: $(date)" > azure_deploy_marker.txt
           echo "App deployed from GitHub Actions" >> azure_deploy_marker.txt
+          
+          # Ensure web.config exists
+          if [ ! -f "web.config" ]; then
+            echo "web.config not found, creating default!"
+            echo '<?xml version="1.0" encoding="UTF-8"?>' > web.config
+            echo '<configuration>' >> web.config
+            echo '  <system.webServer>' >> web.config
+            echo '    <handlers>' >> web.config
+            echo '      <add name="httpPlatformHandler" path="*" verb="*" modules="httpPlatformHandler" resourceType="Unspecified" />' >> web.config
+            echo '    </handlers>' >> web.config
+            echo '    <httpPlatform processPath="python"' >> web.config
+            echo '                  arguments="-m gunicorn main:app --bind=0.0.0.0:%HTTP_PLATFORM_PORT% --worker-class=uvicorn.workers.UvicornWorker --timeout 600 --workers 4"' >> web.config
+            echo '                  stdoutLogEnabled="true"' >> web.config
+            echo '                  stdoutLogFile="\\?\%home%\LogFiles\stdout.log"' >> web.config
+            echo '                  startupTimeLimit="300">' >> web.config
+            echo '      <environmentVariables>' >> web.config
+            echo '        <environmentVariable name="PORT" value="%HTTP_PLATFORM_PORT%" />' >> web.config
+            echo '        <environmentVariable name="PYTHONUNBUFFERED" value="1" />' >> web.config
+            echo '      </environmentVariables>' >> web.config
+            echo '    </httpPlatform>' >> web.config
+            echo '  </system.webServer>' >> web.config
+            echo '</configuration>' >> web.config
+          fi
 
       - name: Zip artifact for deployment
         run: |
-          zip -r release.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.pyo" "*.pyd" ".git/*" ".github/*" ".vscode/*" "*.log" ".pytest_cache/*" "node_modules/*" "*.db" "frontend/node_modules/*" "static/*" "output.tar.gz"
+          # Create a clean directory for deployment files
+          mkdir -p deploy
+          
+          # Copy files to deployment directory
+          cp -r *.py *.sh *.json *.txt web.config .env requirements.txt deploy/
+          cp -r app deploy/
+          
+          # Don't include output.tar.gz in the zip
+          # We'll upload it separately
+          
+          # Create the deployment zip
+          cd deploy
+          zip -r ../release.zip .
+          cd ..
+          
+          # Verify the zip was created
+          ls -la release.zip
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -109,33 +154,31 @@ jobs:
         with:
           name: python-app
 
-      - name: Remove any existing output.tar.gz before unzipping
-        run: rm -f output.tar.gz || true
-
       - name: Unzip artifact for deployment
-        run: unzip -o release.zip
-
-      - name: Verify deployment files
         run: |
-          echo "Listing key deployment files:"
-          ls -la web.config*
-          ls -la startup.sh
-          ls -la deploy.sh
-          ls -la main.py
-          ls -la output.tar.gz || echo "output.tar.gz not found (this is expected)"
+          # Create a clean directory for deployment
+          mkdir -p app_deploy
+          cd app_deploy
           
-          # Ensure scripts are executable
-          chmod +x *.sh
+          # Unzip the release.zip file
+          unzip -o ../release.zip
           
-          # Check for important configuration files
-          [ -f "web.config" ] && echo "✅ web.config exists" || echo "❌ web.config missing"
-          [ -f "web.config.deploy" ] && echo "✅ web.config.deploy exists" || echo "❌ web.config.deploy missing"
-          [ -f "startup.sh" ] && echo "✅ startup.sh exists" || echo "❌ startup.sh missing"
-          [ -f "deploy.sh" ] && echo "✅ deploy.sh exists" || echo "❌ deploy.sh missing"
+          # Move output.tar.gz to the deployment directory
+          if [ -f "../output.tar.gz" ]; then
+            cp ../output.tar.gz .
+            echo "output.tar.gz copied to deployment directory"
+          else
+            echo "WARNING: output.tar.gz not found!"
+          fi
+          
+          # List contents to verify
+          echo "Deployment directory contents:"
+          ls -la
 
       - name: Run deployment preparation script
         run: |
-          chmod +x deploy.sh
+          cd app_deploy
+          chmod +x *.sh
           ./deploy.sh
       
       - name: Login to Azure
@@ -151,6 +194,7 @@ jobs:
         with:
           app-name: 'tradingviewforwarder'
           slot-name: 'Production'
+          package: 'app_deploy'
           timeout-minutes: 15
           respect-slots: true
           max-retries: 3
