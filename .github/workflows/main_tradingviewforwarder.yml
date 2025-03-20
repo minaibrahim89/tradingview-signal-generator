@@ -28,6 +28,26 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          cd ..
+          
+      # Create static.tar.gz for easier deployment
+      - name: Package static files
+        run: |
+          if [ -d "static" ]; then
+            tar -czf static.tar.gz -C static .
+            mv static.tar.gz output.tar.gz
+          fi
       
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -36,7 +56,7 @@ jobs:
 
       - name: Zip artifact for deployment
         run: |
-          zip -r release.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.pyo" "*.pyd" ".git/*" ".github/*" ".vscode/*" "*.log" ".pytest_cache/*" "node_modules/*" "*.db"
+          zip -r release.zip . -x "venv/*" "__pycache__/*" "*.pyc" "*.pyo" "*.pyd" ".git/*" ".github/*" ".vscode/*" "*.log" ".pytest_cache/*" "node_modules/*" "*.db" "frontend/node_modules/*" "static/*"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -44,6 +64,7 @@ jobs:
           name: python-app
           path: |
             release.zip
+            output.tar.gz
             !venv/
 
   deploy:
@@ -87,5 +108,4 @@ jobs:
           respect-slots: true
           max-retries: 3
           retry-wait-seconds: 45
-
       
