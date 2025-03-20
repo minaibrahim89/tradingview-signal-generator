@@ -45,6 +45,9 @@ jobs:
       - name: Package static files
         run: |
           if [ -d "static" ]; then
+            # Remove previous output.tar.gz if exists
+            rm -f output.tar.gz
+            # Create the new archive
             tar -czf static.tar.gz -C static .
             mv static.tar.gz output.tar.gz
           fi
