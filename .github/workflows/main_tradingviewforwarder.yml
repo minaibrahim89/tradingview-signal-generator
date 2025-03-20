@@ -145,11 +145,6 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_D338976C3FD14C438AC7BBAB5BA215A7 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_A59B5AB2EADC48FA812A43C5C5A8BA24 }}
 
-      - name: Set Azure App Service Configuration
-        run: |
-          # Set SCM_DO_BUILD_DURING_DEPLOYMENT to true
-          az webapp config appsettings set --name tradingviewforwarder --resource-group your-resource-group-name --settings SCM_DO_BUILD_DURING_DEPLOYMENT=true WEBSITE_RUN_FROM_PACKAGE=0
-
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
