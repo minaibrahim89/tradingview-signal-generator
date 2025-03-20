@@ -49,23 +49,17 @@ jobs:
           else
             echo "Static directory not found!"
           fi
-          
-      # Package static files for deployment but don't rely on runtime extraction
-      - name: Package static files
+      
+      # CRITICAL: Delete any existing output.tar.gz files to prevent issues
+      - name: Remove any tar.gz files
         run: |
-          if [ -d "static" ]; then
-            echo "Preparing static files for deployment"
-            
-            # Create a separate archive for reference/backup
-            tar -czf static_backup.tar.gz -C static .
-            
-            # Don't use output.tar.gz anymore as it causes issues
-            echo "Not using output.tar.gz for deployment anymore"
-          else
-            echo "Warning: static directory not found"
-            mkdir -p static
-            echo "Created empty static directory"
-          fi
+          echo "Removing any existing tar.gz files to prevent deployment issues"
+          find . -name "*.tar.gz" -delete
+          find . -name "output.tar.gz" -delete
+          
+          # Verify no tar.gz files exist
+          echo "Checking for any remaining tar.gz files:"
+          find . -name "*.tar.gz" || echo "No tar.gz files found"
       
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -86,6 +80,12 @@ jobs:
           # Create Azure deployment markers
           echo "App deployment timestamp: $(date)" > azure_deploy_marker.txt
           echo "App deployed from GitHub Actions" >> azure_deploy_marker.txt
+          
+          # Create marker to indicate no tar.gz is used
+          echo "NO_TARGZ_DEPLOYMENT=true" > no_targz_deployment.txt
+          echo "This deployment does not use output.tar.gz" >> no_targz_deployment.txt
+          echo "Static files are copied directly" >> no_targz_deployment.txt
+          echo "Deployment timestamp: $(date)" >> no_targz_deployment.txt
           
           # Ensure web.config exists
           if [ ! -f "web.config" ]; then
@@ -110,6 +110,49 @@ jobs:
             echo '</configuration>' >> web.config
           fi
 
+      - name: Create emergency cleanup script
+        run: |
+          # Create a script to immediately remove output.tar.gz if found
+          echo '#!/bin/bash' > cleanup_targz.sh
+          echo 'echo "======= EMERGENCY CLEANUP OF TAR.GZ FILES ======="' >> cleanup_targz.sh
+          echo 'if [ -f "output.tar.gz" ]; then' >> cleanup_targz.sh
+          echo '  echo "!!! FOUND output.tar.gz - REMOVING IT IMMEDIATELY !!!"' >> cleanup_targz.sh
+          echo '  rm -f output.tar.gz' >> cleanup_targz.sh
+          echo '  echo "output.tar.gz has been removed"' >> cleanup_targz.sh
+          echo 'else' >> cleanup_targz.sh
+          echo '  echo "✓ No output.tar.gz found"' >> cleanup_targz.sh
+          echo 'fi' >> cleanup_targz.sh
+          echo '' >> cleanup_targz.sh
+          echo '# Check for any tar.gz files' >> cleanup_targz.sh
+          echo 'find . -name "*.tar.gz" > /tmp/targz_files.txt' >> cleanup_targz.sh
+          echo 'if [ -s /tmp/targz_files.txt ]; then' >> cleanup_targz.sh
+          echo '  echo "!!! WARNING: Found tar.gz files:"' >> cleanup_targz.sh
+          echo '  cat /tmp/targz_files.txt' >> cleanup_targz.sh
+          echo '  echo "Removing all tar.gz files..."' >> cleanup_targz.sh
+          echo '  find . -name "*.tar.gz" -delete' >> cleanup_targz.sh
+          echo 'else' >> cleanup_targz.sh
+          echo '  echo "✓ No tar.gz files found anywhere"' >> cleanup_targz.sh
+          echo 'fi' >> cleanup_targz.sh
+          echo 'echo "================================================"' >> cleanup_targz.sh
+          chmod +x cleanup_targz.sh
+          echo "Created emergency cleanup script"
+
+      - name: Update startup script
+        run: |
+          # Create a new script with cleanup code at the top
+          echo '#!/bin/bash' > startup_new.sh
+          echo '' >> startup_new.sh
+          echo '# Run emergency cleanup script first' >> startup_new.sh
+          echo 'echo "Running emergency cleanup of tar.gz files"' >> startup_new.sh
+          echo './cleanup_targz.sh' >> startup_new.sh
+          echo '' >> startup_new.sh
+          
+          # Append the original startup script
+          cat startup.sh >> startup_new.sh
+          mv startup_new.sh startup.sh
+          chmod +x startup.sh
+          echo "Updated startup script with cleanup code"
+
       - name: Prepare deployment package
         run: |
           # Create a clean directory structure for deployment
@@ -119,30 +162,35 @@ jobs:
           cp -r *.py *.sh *.json *.txt web.config .env requirements.txt app_deploy/
           cp -r app app_deploy/
           
-          # Copy static files directly (not as tar.gz)
-          mkdir -p app_deploy/static
+          # Copy static files directly
           if [ -d "static" ] && [ "$(ls -A static)" ]; then
+            mkdir -p app_deploy/static
             cp -r static/* app_deploy/static/
             echo "Static files copied directly to deployment package"
+            
+            # Create a verification file
+            echo "Static files deployed directly at $(date)" > app_deploy/static/direct_deployment.txt
+            echo "This deployment does NOT use output.tar.gz" >> app_deploy/static/direct_deployment.txt
+            
+            # List contents for verification
+            echo "Static directory contents:"
+            ls -la app_deploy/static/
           else
-            echo "No static files to copy"
-            # Create a placeholder index.html
+            echo "No static files to copy, creating placeholder"
             mkdir -p app_deploy/static
-            echo '<html><body><h1>App is running</h1><p>Static files were not available during deployment.</p></body></html>' > app_deploy/static/index.html
+            echo '<html><body><h1>App is running</h1><p>No static files were available during deployment.</p></body></html>' > app_deploy/static/index.html
           fi
-          
-          # Add verification file
-          echo "Static files deployed directly at $(date)" > app_deploy/static/direct_deployment.txt
           
           # Create verification files
           echo "Deployment prepared at $(date)" > app_deploy/deployment_verification.txt
           echo "Files in deployment:" >> app_deploy/deployment_verification.txt
           ls -la app_deploy/ >> app_deploy/deployment_verification.txt
+          echo "Static files contents:" >> app_deploy/deployment_verification.txt
+          ls -la app_deploy/static/ >> app_deploy/deployment_verification.txt
           
-          # Create the deployment zip for artifact (not needed for actual deployment)
-          cd app_deploy
-          zip -r ../deployment.zip .
-          cd ..
+          # CRITICAL CHECK: Make sure no tar.gz files exist in the deployment directory
+          echo "Checking for any tar.gz files in deployment directory:"
+          find app_deploy -name "*.tar.gz" && echo "ERROR: tar.gz files found in deployment!" || echo "✓ No tar.gz files in deployment"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -181,11 +229,12 @@ jobs:
             echo "ERROR: Static directory is missing!"
           fi
           
+          # CRITICAL: Check for any tar.gz files
+          echo "Checking for any tar.gz files that might cause issues:"
+          find app_deploy -name "*.tar.gz" && echo "ERROR: tar.gz file found!" || echo "✓ No tar.gz files in deployment package"
+          
           # Make scripts executable
           chmod +x app_deploy/*.sh
-          
-          # No need to run deploy.sh since files are already extracted
-          echo "Static files are already extracted in the package"
 
       - name: Login to Azure
         uses: azure/login@v2

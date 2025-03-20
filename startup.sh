@@ -1,5 +1,46 @@
 #!/bin/bash
 
+# EMERGENCY TAR.GZ CHECK - Run this first!
+if [ -f "output.tar.gz" ]; then
+  echo "!!! CRITICAL: output.tar.gz found in wwwroot - DELETING IMMEDIATELY !!!"
+  rm -f output.tar.gz
+  echo "Deleted output.tar.gz file"
+else
+  echo "✓ No output.tar.gz found in root directory"
+fi
+
+# Check if wwwroot cleanup script exists and run it
+if [ -f "cleanup_wwwroot.sh" ]; then
+  echo "Running dedicated wwwroot cleanup script..."
+  chmod +x cleanup_wwwroot.sh
+  ./cleanup_wwwroot.sh
+  echo "Wwwroot cleanup completed"
+else
+  echo "No cleanup_wwwroot.sh script found"
+fi
+
+# Check for any other tar.gz files
+echo "Checking for any tar.gz files in the directory..."
+find . -name "*.tar.gz" > /tmp/startup_targz_check.txt
+if [ -s /tmp/startup_targz_check.txt ]; then
+  echo "!!! WARNING: Found tar.gz files during startup:"
+  cat /tmp/startup_targz_check.txt
+  echo "Removing all tar.gz files..."
+  find . -name "*.tar.gz" -delete
+  echo "All tar.gz files removed"
+else
+  echo "✓ No tar.gz files found during startup"
+fi
+
+# Run cleanup script if it exists
+if [ -f "cleanup_targz.sh" ]; then
+  echo "Running cleanup_targz.sh script"
+  chmod +x cleanup_targz.sh
+  ./cleanup_targz.sh
+else
+  echo "No cleanup_targz.sh script found"
+fi
+
 # Log startup
 echo "Starting application at $(date)"
 echo "Running as user: $(whoami)"
@@ -102,6 +143,15 @@ echo "Disk space: $(df -h . || echo 'df command not available')"
 echo "Application started at $(date)" > startup_verification.txt
 echo "Running as: $(whoami)" >> startup_verification.txt
 echo "In directory: $(pwd)" >> startup_verification.txt
+
+# One final check for output.tar.gz before starting the application
+if [ -f "output.tar.gz" ]; then
+  echo "!!! CRITICAL: output.tar.gz still found before starting app - deleting it again!!!"
+  rm -f output.tar.gz
+  echo "Deleted output.tar.gz file"
+else
+  echo "✓ No output.tar.gz found before starting application"
+fi
 
 # Run Gunicorn for production on Azure
 echo "Starting Gunicorn on 0.0.0.0:$PORT"

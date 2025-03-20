@@ -3,6 +3,27 @@
 # Note: In the new workflow, static files are copied directly and this script is no longer
 # responsible for extracting output.tar.gz
 
+# CRITICAL: Check for output.tar.gz and remove it immediately
+if [ -f "output.tar.gz" ]; then
+  echo "!!! CRITICAL: Found output.tar.gz in wwwroot - removing immediately !!!"
+  rm -f output.tar.gz
+  echo "Removed output.tar.gz file"
+else
+  echo "✓ No output.tar.gz found in root directory"
+fi
+
+# Check for any tar.gz files and remove them
+find . -name "*.tar.gz" > /tmp/targz_files.txt
+if [ -s /tmp/targz_files.txt ]; then
+  echo "!!! WARNING: Found tar.gz files:"
+  cat /tmp/targz_files.txt
+  echo "Removing all tar.gz files..."
+  find . -name "*.tar.gz" -delete
+  echo "All tar.gz files removed"
+else
+  echo "✓ No tar.gz files found anywhere"
+fi
+
 # Create marker file for Azure
 echo "Creating marker file for Azure deployment"
 touch deployment_complete.txt
@@ -156,6 +177,19 @@ echo "gunicorn main:app --bind=0.0.0.0:\$PORT --worker-class=uvicorn.workers.Uvi
 echo "Deployment completed at $(date)" > deployment_verification.txt
 echo "Files deployed:" >> deployment_verification.txt
 ls -la >> deployment_verification.txt
+
+# Final check for any tar.gz files
+echo "Final check for any tar.gz files:"
+find . -name "*.tar.gz" > /tmp/final_check.txt
+if [ -s /tmp/final_check.txt ]; then
+  echo "!!! WARNING: Still found tar.gz files after deployment:"
+  cat /tmp/final_check.txt
+  echo "Attempting final removal of all tar.gz files..."
+  find . -name "*.tar.gz" -delete
+  echo "Removed all tar.gz files"
+else
+  echo "✓ No tar.gz files found in final check"
+fi
 
 echo "Deployment script completed"
 ls -la
