@@ -1,13 +1,19 @@
 {
-    "name": "email-forwarder",
+    "name": "tradingview-signal-generator",
     "version": "1.0.0",
+    "description": "TradingView Signal Generator with FastAPI and React",
     "private": true,
     "scripts": {
         "frontend:dev": "cd frontend && npm run dev",
         "frontend:build": "cd frontend && npm run build",
         "backend:dev": "python main.py",
         "install:all": "cd frontend && npm install",
-        "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\""
+        "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+        "start": "node server.js"
+    },
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=9.0.0"
     },
     "devDependencies": {
         "concurrently": "^8.2.2"

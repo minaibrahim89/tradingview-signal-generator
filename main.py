@@ -151,6 +151,24 @@ async def health_check():
     }
 
 
+# Root path handler
+@app.get("/")
+async def root():
+    """Handle the root path explicitly."""
+    # Serve the index.html for the root path
+    index_path = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        # If frontend is not built yet, return a JSON response
+        return {
+            "status": "running",
+            "message": "API is operational but frontend is not built",
+            "documentation": "/docs",
+            "version": "1.0.0"
+        }
+
+
 # Serve favicon.ico from the static directory
 @app.get("/favicon.ico")
 async def favicon():
