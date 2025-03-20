@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11'
 
       - name: Create and start virtual environment
         run: |
@@ -50,12 +50,26 @@ jobs:
             # Create the new archive
             tar -czf static.tar.gz -C static .
             mv static.tar.gz output.tar.gz
+            echo "Static files packaged successfully"
+            ls -la output.tar.gz
+          else
+            echo "Warning: static directory not found"
+            ls -la
           fi
       
       - name: Install dependencies
         run: pip install -r requirements.txt
         
       # Optional: Add step to run tests here (PyTest, Django test suites, etc.)
+
+      - name: Prepare deployment files
+        run: |
+          # Create a minimal .env file for production
+          echo "DEBUG=False" > .env
+          echo "CORS_ORIGIN=*" >> .env
+          
+          # Create empty static dir if it doesn't exist
+          mkdir -p static
 
       - name: Zip artifact for deployment
         run: |
@@ -92,6 +106,24 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip -o release.zip
 
+      - name: Verify deployment files
+        run: |
+          echo "Listing key deployment files:"
+          ls -la web.config*
+          ls -la startup.sh
+          ls -la deploy.sh
+          ls -la main.py
+          ls -la output.tar.gz || echo "output.tar.gz not found (this is expected)"
+          
+          # Ensure scripts are executable
+          chmod +x *.sh
+          
+          # Check for important configuration files
+          [ -f "web.config" ] && echo "✅ web.config exists" || echo "❌ web.config missing"
+          [ -f "web.config.deploy" ] && echo "✅ web.config.deploy exists" || echo "❌ web.config.deploy missing"
+          [ -f "startup.sh" ] && echo "✅ startup.sh exists" || echo "❌ startup.sh missing"
+          [ -f "deploy.sh" ] && echo "✅ deploy.sh exists" || echo "❌ deploy.sh missing"
+
       - name: Run deployment preparation script
         run: |
           chmod +x deploy.sh
@@ -110,7 +142,7 @@ jobs:
         with:
           app-name: 'tradingviewforwarder'
           slot-name: 'Production'
-          timeout-minutes: 10
+          timeout-minutes: 15
           respect-slots: true
           max-retries: 3
           retry-wait-seconds: 45

@@ -7,6 +7,12 @@ chmod +x startup.sh
 # Make sure files have correct line endings
 find . -type f -name "*.sh" -exec dos2unix {} \;
 
+# Use the deployment-specific web.config if available
+if [ -f "web.config.deploy" ]; then
+  echo "Using deployment-specific web.config"
+  cp web.config.deploy web.config
+fi
+
 # Extract static files if archive exists
 if [ -f "output.tar.gz" ]; then
   echo "Extracting static files during deployment..."
@@ -19,6 +25,7 @@ fi
 # Create .env file with debug setting
 echo "Creating .env file with debug settings..."
 echo "DEBUG=True" > .env
+echo "CORS_ORIGIN=*" >> .env
 
 echo "Deployment script completed"
 exit 0 
