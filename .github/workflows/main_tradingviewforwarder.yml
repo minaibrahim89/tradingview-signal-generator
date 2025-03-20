@@ -98,10 +98,33 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: python-app
-          path: .
+          path: ./artifact_package
 
-      - name: Make scripts executable
-        run: chmod +x *.sh
+      - name: Extract and prepare deployment files
+        run: |
+          echo "Downloaded artifact contents:"
+          ls -la ./artifact_package
+          
+          # Create deployment directory
+          mkdir -p ./deploy
+          
+          # Extract all files from the artifact
+          cp -r ./artifact_package/* ./deploy/
+          
+          # Make scripts executable
+          chmod +x ./deploy/*.sh
+          
+          # Verify deploy directory structure
+          echo "Deploy directory contents:"
+          ls -la ./deploy
+          
+          # Verify critical files exist
+          if [ ! -f "./deploy/web.config" ]; then echo "ERROR: web.config is missing"; exit 1; fi
+          if [ ! -f "./deploy/extract_and_start.sh" ]; then echo "ERROR: extract_and_start.sh is missing"; exit 1; fi
+          if [ ! -f "./deploy/main.py" ]; then echo "ERROR: main.py is missing"; exit 1; fi
+          
+          # Create a marker file to indicate this deployment was unpacked
+          echo "Deployment unpacked directly, no tar.gz created at $(date)" > ./deploy/deployment_unpacked.txt
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -116,5 +139,5 @@ jobs:
         with:
           app-name: 'tradingviewforwarder'
           slot-name: 'Production'
-          package: '.'
+          package: './deploy'
       
