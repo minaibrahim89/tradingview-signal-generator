@@ -62,6 +62,17 @@ jobs:
           # Make scripts executable
           chmod +x app_deploy/*.sh
           
+          # Specifically ensure extract_and_start.sh is included and executable
+          if [ ! -f "app_deploy/extract_and_start.sh" ]; then
+            echo "WARNING: extract_and_start.sh not found in app_deploy"
+            cp extract_and_start.sh app_deploy/ || echo "Failed to copy extract_and_start.sh"
+            chmod +x app_deploy/extract_and_start.sh || echo "Failed to make extract_and_start.sh executable"
+          fi
+          
+          # Verify the deployment package
+          echo "Deployment package contents:"
+          ls -la app_deploy/
+          
           # Verify no tar.gz files in the deployment
           find app_deploy -name "*.tar.gz" -delete
 
