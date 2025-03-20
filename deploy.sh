@@ -3,44 +3,46 @@
 # Note: In the new workflow, static files are copied directly and this script is no longer
 # responsible for extracting output.tar.gz
 
-# CRITICAL: Check for output.tar.gz and remove it immediately
+# Check for output.tar.gz and remove it if found
 if [ -f "output.tar.gz" ]; then
-  echo "!!! CRITICAL: Found output.tar.gz in wwwroot - removing immediately !!!"
+  echo "Found output.tar.gz - removing it"
   rm -f output.tar.gz
-  echo "Removed output.tar.gz file"
-else
-  echo "✓ No output.tar.gz found in root directory"
 fi
 
-# Check for any tar.gz files and remove them
-find . -name "*.tar.gz" > /tmp/targz_files.txt
-if [ -s /tmp/targz_files.txt ]; then
-  echo "!!! WARNING: Found tar.gz files:"
-  cat /tmp/targz_files.txt
-  echo "Removing all tar.gz files..."
-  find . -name "*.tar.gz" -delete
-  echo "All tar.gz files removed"
-else
-  echo "✓ No tar.gz files found anywhere"
+# Remove any tar.gz files
+find . -name "*.tar.gz" -delete 2>/dev/null
+
+echo "Deployment started at $(date)"
+echo "Current directory: $(pwd)"
+
+# Ensure scripts are executable
+find . -name "*.sh" -exec chmod +x {} \;
+
+# Fix any Windows line endings
+if command -v dos2unix >/dev/null 2>&1; then
+  find . -name "*.sh" -exec dos2unix {} \;
 fi
+
+# Ensure static directory exists
+if [ ! -d "static" ]; then
+  echo "Creating static directory"
+  mkdir -p static
+  echo '<html><body><h1>App is running</h1></body></html>' > static/index.html
+fi
+
+# Install dependencies
+echo "Installing dependencies"
+pip install -r requirements.txt
+
+echo "Deployment completed at $(date)"
 
 # Create marker file for Azure
 echo "Creating marker file for Azure deployment"
 touch deployment_complete.txt
 
 # Debug information
-echo "Current directory: $(pwd)"
 echo "Directory contents:"
 ls -la
-
-# Ensure scripts are executable
-echo "Making scripts executable..."
-chmod +x *.sh
-find . -type f -name "*.sh" -exec chmod +x {} \;
-
-# Make sure files have correct line endings
-echo "Fixing line endings..."
-find . -type f -name "*.sh" -exec dos2unix {} \; 2>/dev/null || echo "dos2unix not available"
 
 # Use the deployment-specific web.config if available
 if [ -f "web.config.deploy" ]; then

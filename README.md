@@ -1,210 +1,88 @@
-# Gmail Trading Signal Forwarder
+# Trading View Signal Generator
 
-A Python FastAPI application that monitors Gmail inbox for trading signals and forwards them to configurable webhooks.
+A FastAPI application that monitors Gmail for trading signals and forwards them to webhooks.
 
 ## Features
 
-- Monitor Gmail inbox for new messages
-- Filter emails by sender, subject, or other criteria
-- Forward email body content to configurable webhook URLs
-- Track processed emails to avoid duplicate processing
-- Modern React UI for easy configuration and monitoring
-- RESTful API for configuration management
-- SQLite database for persistent storage
+* Monitor Gmail inbox for trading signals via email
+* Filter emails by sender, subject, etc.
+* Forward email content to configurable webhooks
+* Track processed emails to avoid duplicates
+* Web interface for configuration and monitoring
 
-## Requirements
+## Deployment on Azure
 
-- Python 3.8+
-- Node.js 16+ (for UI development)
-- Gmail account
-- Google Cloud Platform account (for Gmail API access)
+This application is configured for deployment on Azure App Service. The deployment process has been simplified to ensure reliable operation.
 
-## Setup
+### Deployment Process
 
-### 1. Clone the repository
+1. The GitHub workflow builds the application and deploys it to Azure App Service.
+2. Static files are copied directly to the deployment package (no .tar.gz files involved).
+3. During startup, any leftover .tar.gz files are automatically removed.
+4. Scripts ensure the application starts properly with all required dependencies.
 
-```bash
-git clone <repository-url>
-cd email_forwarder
-```
+### Important Files
 
-### 2. Create a virtual environment
+- **startup.sh**: Main entry script for Azure App Service
+- **deploy.sh**: Additional deployment script
+- **main.py**: Main application file
+- **requirements.txt**: Python dependencies
 
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
+## Development
 
-### 3. Install dependencies
+### Local Setup
 
-```bash
-# Install Python dependencies
-pip install -r requirements.txt
+1. Clone the repository
+2. Create a virtual environment:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+3. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+4. Set up Gmail API credentials:
+   - Place `credentials.json` in the root directory
+   - Or set environment variables: `CLIENT_ID`, `CLIENT_SECRET`, `REFRESH_TOKEN`
 
-# Install frontend dependencies (optional, only needed for development)
-npm run install:all
-```
+5. Run the application:
+   ```
+   python main.py
+   ```
 
-### 4. Set up Gmail API credentials
+### Frontend Development
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project
-3. Enable the Gmail API for your project:
+The frontend uses Vite and React:
 
-   - Go to "APIs & Services" > "Library"
-   - Search for "Gmail API" and enable it
+1. Navigate to the frontend directory:
+   ```
+   cd frontend
+   ```
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Start the development server:
+   ```
+   npm run dev
+   ```
 
-4. Configure OAuth consent screen:
+## Endpoints
 
-   - Go to "APIs & Services" > "OAuth consent screen"
-   - Select "External" user type (or "Internal" if you have Google Workspace)
-   - Fill in the required app information (app name, user support email, developer contact email)
-   - Add the scope: `.../auth/gmail.readonly`
-   - Add yourself as a test user by entering your Gmail address
+- **API**: `/api/v1/...`
+- **Health Check**: `/health`
+- **Documentation**: `/docs`
+- **Frontend**: `/`
 
-5. Create OAuth 2.0 credentials:
+## Troubleshooting
 
-   - Go to "APIs & Services" > "Credentials"
-   - Click "Create Credentials" and select "OAuth client ID"
-   - Application type: **Desktop app**
-   - Name: Gmail Signal Forwarder (or your preferred name)
+If you encounter deployment issues:
 
-6. Download the credentials JSON file
-7. Save the file as `credentials.json` in the application directory
-
-### 5. Configure environment variables
-
-Create a `.env` file in the application directory:
-
-```
-DEBUG=true
-APP_HOST=0.0.0.0
-APP_PORT=8000
-DATABASE_URL=sqlite:///./email_forwarder.db
-GMAIL_TOKEN_PATH=token.json
-GMAIL_CREDENTIALS_PATH=credentials.json
-# Set to "true" to use browser-based authentication (requires GUI)
-# Set to "false" for headless environments (will show a URL to visit)
-USE_LOCAL_SERVER_AUTH=false
-```
-
-## Running the application
-
-### Production mode
-
-For production use, first build the frontend:
-
-```bash
-npm run frontend:build
-```
-
-Then run the FastAPI application:
-
-```bash
-python main.py
-```
-
-The application will be available at http://localhost:8000
-
-### Development mode
-
-For development, you can run both the backend and frontend in development mode:
-
-```bash
-npm run dev
-```
-
-This starts:
-
-- The FastAPI backend at http://localhost:8000
-- The React development server at http://localhost:5173
-
-### Authentication methods
-
-The application supports two authentication methods:
-
-1. **Browser-based authentication** (Default in environments with GUI):
-
-   - Set `USE_LOCAL_SERVER_AUTH=true` in your `.env` file
-   - When you run the application, it will open a browser for you to authorize access to Gmail
-
-2. **Headless authentication** (For servers without browsers):
-   - Set `USE_LOCAL_SERVER_AUTH=false` in your `.env` file
-   - When you run the application, it will display a URL in the console
-   - Open that URL in a browser on any device
-   - Complete the authorization in the browser
-   - You will be redirected to a URL that starts with `http://localhost?code=`
-   - Copy the **entire** value after `?code=` in the URL
-   - Paste this code back in the console when prompted
-
-### Troubleshooting OAuth errors
-
-If you encounter an error like `Fehler 400: invalid_request` or other OAuth issues:
-
-1. **Check your credentials.json**: Make sure you downloaded the correct credentials file for a **Desktop app** (not Web app)
-2. **Verify project configuration**:
-   - Ensure the Gmail API is enabled in your Google Cloud project
-   - Check that your OAuth consent screen is properly configured
-   - Make sure you've added yourself as a test user
-3. **Clean up and retry**:
-   - Delete any existing `token.json` file
-   - Restart the application
-   - When copying the authorization code, make sure to copy the entire code parameter from the URL
-4. **Redirect URI**: If modifying the code, ensure your redirect URI matches what's configured in Google Cloud Console
-
-## User Interface
-
-The application includes a modern React UI built with Material UI that provides:
-
-1. **Dashboard**
-
-   - Quick overview of application status
-   - Active webhooks and email configurations
-   - Quick links to main functionality
-
-2. **Webhooks Management**
-
-   - Add, edit and delete webhook configurations
-   - Set active/inactive status
-
-3. **Email Configuration**
-
-   - Configure which emails to monitor
-   - Add filters for subject or sender
-   - Set check intervals and active status
-
-4. **Processed Emails**
-
-   - View all processed emails
-   - Check forwarding status
-   - View email content
-
-5. **Settings**
-   - Upload Gmail API credentials
-   - Reset Google authentication
-   - View configuration
-
-## API Documentation
-
-The API documentation is available at:
-
-```
-http://localhost:8000/docs
-```
-
-## Webhook Payload Format
-
-When a matching email is received, the application will forward it to all active webhooks with the following JSON payload format:
-
-```json
-{
-  "body": "The full email body content...",
-  "subject": "Email subject",
-  "sender": "sender@example.com",
-  "timestamp": "2023-01-01T12:00:00.000Z"
-}
-```
+1. Check the application logs on Azure App Service
+2. Verify the health endpoint is responding correctly
+3. Ensure all required credentials are available
 
 ## License
 
-MIT
+[MIT License](LICENSE)
