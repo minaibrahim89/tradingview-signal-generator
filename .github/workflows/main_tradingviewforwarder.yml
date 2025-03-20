@@ -2,7 +2,7 @@
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 # More info on Python, GitHub Actions, and Azure App Service: https://aka.ms/python-webapps-actions
 
-name: Build and deploy Python app to Azure Web App - tradingviewforwarder
+name: Build and deploy Python app to Azure Web App
 
 on:
   push:
@@ -24,11 +24,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Create and start virtual environment
-        run: |
-          python -m venv venv
-          source venv/bin/activate
-          
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -42,7 +37,10 @@ jobs:
           cd ..
       
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
         
       - name: Prepare deployment package
         run: |
@@ -50,21 +48,24 @@ jobs:
           mkdir -p app_deploy
           
           # Copy application files
-          cp -r *.py *.sh *.json *.txt web.config requirements.txt app_deploy/
+          cp -r *.py *.sh *.json *.txt web.config requirements.txt .deployment app_deploy/
           cp -r app app_deploy/
           
-          # Create and copy static files directly
+          # Make sure static directory exists and copy content
           mkdir -p app_deploy/static
           if [ -d "static" ] && [ "$(ls -A static)" ]; then
             cp -r static/* app_deploy/static/
           else
-            echo '<html><body><h1>App is running</h1></body></html>' > app_deploy/static/index.html
+            echo '<html><body><h1>API Server Running</h1></body></html>' > app_deploy/static/index.html
           fi
           
-          # Make sure scripts are executable
+          # Make scripts executable
           chmod +x app_deploy/*.sh
+          
+          # Verify no tar.gz files in the deployment
+          find app_deploy -name "*.tar.gz" -delete
 
-      - name: Upload artifact for deployment job
+      - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
           name: python-app

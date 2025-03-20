@@ -1,39 +1,41 @@
 #!/bin/bash
+# Simple startup script for Azure Web App
 
-# Check for output.tar.gz and remove it if found
+# Run cleanup script first if it exists
+if [ -f "cleanup.sh" ]; then
+  echo "Running cleanup script..."
+  chmod +x cleanup.sh
+  ./cleanup.sh
+fi
+
+# Backup check for any tar.gz files
 if [ -f "output.tar.gz" ]; then
   echo "Found output.tar.gz - removing it"
   rm -f output.tar.gz
 fi
-
-# Remove any tar.gz files
 find . -name "*.tar.gz" -delete 2>/dev/null
 
-# Normal startup continues
-echo "Starting application at $(date)"
-echo "Current directory: $(pwd)"
-
-# Check static directory
+# Ensure static directory exists
 if [ ! -d "static" ]; then
-  echo "Static directory missing, creating it"
+  echo "Creating static directory"
   mkdir -p static
-  echo '<html><body><h1>App is running</h1></body></html>' > static/index.html
+  echo '<html><body><h1>API Server Running</h1><p>Access the API at <a href="/docs">/docs</a></p></body></html>' > static/index.html
 fi
 
-# Install dependencies
-echo "Installing dependencies..."
-pip install -r requirements.txt
+# Install dependencies if needed
+if [ ! -d "venv" ] && [ -f "requirements.txt" ]; then
+  echo "Installing dependencies..."
+  pip install -r requirements.txt
+fi
 
 # Determine the port
 PORT=${WEBSITES_PORT:-${PORT:-${HTTP_PLATFORM_PORT:-8000}}}
-echo "Using port: $PORT"
+echo "Starting application on port $PORT"
 
-# Run Gunicorn for production on Azure
-echo "Starting Gunicorn on 0.0.0.0:$PORT"
-exec gunicorn \
+# Start the application
+exec gunicorn main:app \
   --bind=0.0.0.0:$PORT \
   --worker-class=uvicorn.workers.UvicornWorker \
   --workers=4 \
   --timeout=600 \
-  --log-level=info \
-  main:app
+  --log-level=info

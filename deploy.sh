@@ -1,33 +1,20 @@
 #!/bin/bash
-# This script helps with Azure deployments
-# Note: In the new workflow, static files are copied directly and this script is no longer
-# responsible for extracting output.tar.gz
+# Simple deployment script for Azure
 
-# Check for output.tar.gz and remove it if found
-if [ -f "output.tar.gz" ]; then
-  echo "Found output.tar.gz - removing it"
-  rm -f output.tar.gz
-fi
-
-# Remove any tar.gz files
-find . -name "*.tar.gz" -delete 2>/dev/null
+# Check for and remove any tar.gz files in wwwroot
+echo "Checking for tar.gz files..."
+find . -name "*.tar.gz" -delete
 
 echo "Deployment started at $(date)"
-echo "Current directory: $(pwd)"
 
-# Ensure scripts are executable
-find . -name "*.sh" -exec chmod +x {} \;
-
-# Fix any Windows line endings
-if command -v dos2unix >/dev/null 2>&1; then
-  find . -name "*.sh" -exec dos2unix {} \;
-fi
+# Ensure scripts are executable 
+chmod +x *.sh
 
 # Ensure static directory exists
 if [ ! -d "static" ]; then
   echo "Creating static directory"
   mkdir -p static
-  echo '<html><body><h1>App is running</h1></body></html>' > static/index.html
+  echo '<html><body><h1>API Server Running</h1><p>Access the API at <a href="/docs">/docs</a></p></body></html>' > static/index.html
 fi
 
 # Install dependencies
