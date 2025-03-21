@@ -15,17 +15,22 @@ if [ -f "output.tar.gz" ]; then
 fi
 find . -name "*.tar.gz" -delete 2>/dev/null
 
+# Setup Python virtual environment if it doesn't exist
+if [ ! -d "antenv" ]; then
+  echo "Creating Python virtual environment in 'antenv'..."
+  python -m venv antenv
+  source antenv/bin/activate
+  pip install -r requirements.txt
+else
+  echo "Using existing virtual environment in 'antenv'"
+  source antenv/bin/activate
+fi
+
 # Ensure static directory exists
 if [ ! -d "static" ]; then
   echo "Creating static directory"
   mkdir -p static
   echo '<html><body><h1>API Server Running</h1><p>Access the API at <a href="/docs">/docs</a></p></body></html>' > static/index.html
-fi
-
-# Install dependencies if needed
-if [ ! -d "venv" ] && [ -f "requirements.txt" ]; then
-  echo "Installing dependencies..."
-  pip install -r requirements.txt
 fi
 
 # Determine the port
