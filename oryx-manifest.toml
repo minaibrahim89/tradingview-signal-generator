@@ -1,0 +1,3 @@
+# Custom oryx-manifest.toml to override Azure's default build behavior
+CompressDestinationDir = false
+CompressDestinationDirCommand = "" 

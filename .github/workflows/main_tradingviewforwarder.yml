@@ -51,6 +51,10 @@ jobs:
           cp -r *.py *.sh *.json *.txt web.config requirements.txt .deployment app_deploy/
           cp -r app app_deploy/
           
+          # Make sure Oryx configuration files are included
+          cp .oryx_options app_deploy/
+          cp oryx-manifest.toml app_deploy/
+          
           # Make sure static directory exists and copy content
           mkdir -p app_deploy/static
           if [ -d "static" ] && [ "$(ls -A static)" ]; then
@@ -68,6 +72,9 @@ jobs:
             cp extract_and_start.sh app_deploy/ || echo "Failed to copy extract_and_start.sh"
             chmod +x app_deploy/extract_and_start.sh || echo "Failed to make extract_and_start.sh executable"
           fi
+          
+          # Create special marker file for Oryx
+          echo "Oryx compression disabled" > app_deploy/.skipcompress
           
           # Verify the deployment package
           echo "Deployment package contents:"
@@ -122,6 +129,7 @@ jobs:
           if [ ! -f "./deploy/web.config" ]; then echo "ERROR: web.config is missing"; exit 1; fi
           if [ ! -f "./deploy/extract_and_start.sh" ]; then echo "ERROR: extract_and_start.sh is missing"; exit 1; fi
           if [ ! -f "./deploy/main.py" ]; then echo "ERROR: main.py is missing"; exit 1; fi
+          if [ ! -f "./deploy/.oryx_options" ]; then echo "WARNING: .oryx_options is missing"; fi
           
           # Create a marker file to indicate this deployment was unpacked
           echo "Deployment unpacked directly, no tar.gz created at $(date)" > ./deploy/deployment_unpacked.txt

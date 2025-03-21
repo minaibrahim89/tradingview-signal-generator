@@ -1,0 +1,1 @@
+This file instructs Oryx build system not to compress the application directory into output.tar.gz 
