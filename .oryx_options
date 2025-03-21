@@ -1,2 +1,6 @@
 compress_destination_dir=false
-disable_collection=true 
+disable_collection=true
+oryx.skipcompression=true
+disableSourceBuild=true
+SCM_DO_BUILD_DURING_DEPLOYMENT=false
+ORYX_DISABLE_DESTINATION_COMPRESSION=true 

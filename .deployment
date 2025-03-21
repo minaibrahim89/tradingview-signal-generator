@@ -1,3 +1,4 @@
 [config]
-command = bash extract_and_start.sh
-SCM_DO_BUILD_DURING_DEPLOYMENT=true
+SCM_DO_BUILD_DURING_DEPLOYMENT=false
+ORYX_DISABLE_COMPRESSION=true
+command = bash startup.sh
