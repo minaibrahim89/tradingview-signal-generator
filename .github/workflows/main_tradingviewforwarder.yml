@@ -51,9 +51,22 @@ jobs:
           cp -r *.py *.sh *.json *.txt web.config requirements.txt .deployment app_deploy/
           cp -r app app_deploy/
           
-          # Make sure Oryx configuration files are included
+          # Ensure .azure directory exists and contains startup script
+          mkdir -p app_deploy/.azure
+          cp .azure/startup.sh app_deploy/.azure/ || echo "Failed to copy .azure/startup.sh"
+          chmod +x app_deploy/.azure/startup.sh || echo "Failed to make .azure/startup.sh executable"
+          echo "Created app_deploy/.azure/startup.sh"
+          
+          # Make sure Oryx configuration files are included (with fixed format)
           cp .oryx_options app_deploy/
           cp oryx-manifest.toml app_deploy/
+          cp .skipcompress app_deploy/
+          
+          # Create standard Azure App Service startup script location
+          mkdir -p app_deploy/home/site/scripts
+          echo '#!/bin/bash' > app_deploy/home/site/scripts/startup.sh
+          echo 'cd /home/site/wwwroot && bash startup.sh' >> app_deploy/home/site/scripts/startup.sh
+          chmod +x app_deploy/home/site/scripts/startup.sh
           
           # Make sure static directory exists and copy content
           mkdir -p app_deploy/static
@@ -66,19 +79,14 @@ jobs:
           # Make scripts executable
           chmod +x app_deploy/*.sh
           
-          # Specifically ensure extract_and_start.sh is included and executable
-          if [ ! -f "app_deploy/extract_and_start.sh" ]; then
-            echo "WARNING: extract_and_start.sh not found in app_deploy"
-            cp extract_and_start.sh app_deploy/ || echo "Failed to copy extract_and_start.sh"
-            chmod +x app_deploy/extract_and_start.sh || echo "Failed to make extract_and_start.sh executable"
-          fi
-          
           # Create special marker file for Oryx
           echo "Oryx compression disabled" > app_deploy/.skipcompress
           
           # Verify the deployment package
           echo "Deployment package contents:"
           ls -la app_deploy/
+          echo "Check .azure directory:"
+          ls -la app_deploy/.azure/ || echo "Failed to list .azure directory"
           
           # Verify no tar.gz files in the deployment
           find app_deploy -name "*.tar.gz" -delete
@@ -118,18 +126,33 @@ jobs:
           # Extract all files from the artifact
           cp -r ./artifact_package/* ./deploy/
           
+          # Make sure .azure directory has startup script
+          if [ ! -d "./deploy/.azure" ]; then
+            echo "Creating .azure directory"
+            mkdir -p ./deploy/.azure
+          fi
+          
+          if [ ! -f "./deploy/.azure/startup.sh" ]; then
+            echo "Creating basic .azure/startup.sh"
+            echo '#!/bin/bash' > ./deploy/.azure/startup.sh
+            echo 'cd /home/site/wwwroot && ./startup.sh' >> ./deploy/.azure/startup.sh
+            chmod +x ./deploy/.azure/startup.sh
+          fi
+          
           # Make scripts executable
           chmod +x ./deploy/*.sh
           
           # Verify deploy directory structure
           echo "Deploy directory contents:"
           ls -la ./deploy
+          echo "Check .azure directory:"
+          ls -la ./deploy/.azure/ || echo "Failed to list .azure directory"
           
           # Verify critical files exist
           if [ ! -f "./deploy/web.config" ]; then echo "ERROR: web.config is missing"; exit 1; fi
-          if [ ! -f "./deploy/extract_and_start.sh" ]; then echo "ERROR: extract_and_start.sh is missing"; exit 1; fi
+          if [ ! -f "./deploy/startup.sh" ]; then echo "ERROR: startup.sh is missing"; exit 1; fi
           if [ ! -f "./deploy/main.py" ]; then echo "ERROR: main.py is missing"; exit 1; fi
-          if [ ! -f "./deploy/.oryx_options" ]; then echo "WARNING: .oryx_options is missing"; fi
+          if [ ! -f "./deploy/.azure/startup.sh" ]; then echo "WARNING: .azure/startup.sh is missing"; fi
           
           # Create a marker file to indicate this deployment was unpacked
           echo "Deployment unpacked directly, no tar.gz created at $(date)" > ./deploy/deployment_unpacked.txt

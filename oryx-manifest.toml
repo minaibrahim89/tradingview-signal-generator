@@ -1,3 +1,8 @@
 # Custom oryx-manifest.toml to override Azure's default build behavior
 CompressDestinationDir = "false"
-CompressDestinationDirCommand = "" 
+CompressDestinationDirCommand = ""
+
+# Oryx manifest for Azure App Service
+Kind = "Manifest"
+ManifestVersion = "1.0"
+DisableCollectingBuildMetrics = "true" 
