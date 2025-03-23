@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
 import json
 import datetime
+import secrets
 
 from app.api.endpoints import router as api_router
 from app.models.database import get_db, initialize_db
@@ -89,6 +90,9 @@ origins = [
     "wss://127.0.0.1:5173",
     "wss://127.0.0.1:8000",
 ]
+
+# Generate a secret key
+SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
 
 # CORS setup
 app.add_middleware(

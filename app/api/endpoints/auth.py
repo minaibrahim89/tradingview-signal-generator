@@ -1,17 +1,27 @@
 import os
 import json
 import shutil
-from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+import secrets
+from fastapi import APIRouter, File, UploadFile, HTTPException, BackgroundTasks, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Optional
 from pydantic import BaseModel
-from app.services.credential_utils import get_google_credentials_data
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+from app.services.credential_utils import get_google_credentials_data, save_credentials_to_token_file
+from app.config import (
+    SCOPES,
+    TOKEN_PATH,
+    CREDENTIALS_PATH,
+    REDIRECT_URI,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET
+)
 
 router = APIRouter()
 
-# Paths
-TOKEN_PATH = os.getenv("GMAIL_TOKEN_PATH", "token.json")
-CREDENTIALS_PATH = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
+# Store OAuth2 flow state
+oauth_flows = {}
 
 
 class AuthStatus(BaseModel):
@@ -27,10 +37,11 @@ class AuthStatus(BaseModel):
 @router.get("/status", response_model=AuthStatus)
 async def get_auth_status():
     """Get the current authentication status"""
-    # Check for credentials in environment variable or file
-    creds_data = get_google_credentials_data()
-    credentials_exist = creds_data is not None
+    # Check for credentials
     token_exists = os.path.exists(TOKEN_PATH)
+    
+    # Check if we have client ID and secret configured
+    credentials_exist = (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) or get_google_credentials_data() is not None
 
     email = None
     if token_exists:
@@ -41,13 +52,11 @@ async def get_auth_status():
                 if not email and 'id_token' in token_data:
                     # Try to extract email from id_token if available
                     import base64
-                    import json
                     id_token = token_data['id_token']
                     # Extract the payload part (second segment)
                     payload = id_token.split('.')[1]
                     # Add padding if needed
-                    payload += '=' * (4 - len(payload) %
-                                      4) if len(payload) % 4 else ''
+                    payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
                     try:
                         decoded = base64.b64decode(payload).decode('utf-8')
                         payload_data = json.loads(decoded)
@@ -65,6 +74,99 @@ async def get_auth_status():
         "token_path": TOKEN_PATH,
         "email": email
     }
+
+
+@router.get("/login")
+async def login(request: Request, response: Response):
+    """Initiate Google OAuth login flow"""
+    # Generate a state token to prevent CSRF
+    state = secrets.token_urlsafe(32)
+    
+    # Use the configured client ID and secret if available
+    if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+        # Create a flow instance with client ID and secret
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [REDIRECT_URI]
+                }
+            },
+            scopes=SCOPES,
+            redirect_uri=REDIRECT_URI
+        )
+    else:
+        # Fall back to credentials file if available
+        creds_data = get_google_credentials_data()
+        if not creds_data:
+            raise HTTPException(
+                status_code=400, 
+                detail="Google credentials not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables."
+            )
+        
+        # Create a flow instance from client config
+        flow = Flow.from_client_config(
+            creds_data,
+            scopes=SCOPES,
+            redirect_uri=REDIRECT_URI
+        )
+    
+    # Generate the authorization URL
+    auth_url, _ = flow.authorization_url(
+        access_type='offline',
+        include_granted_scopes='true',
+        prompt='consent',
+        state=state
+    )
+    
+    # Store flow information in our dictionary
+    oauth_flows[state] = flow
+    
+    # Redirect to the authorization URL
+    return RedirectResponse(auth_url)
+
+
+@router.get("/callback")
+async def callback(request: Request, state: str, code: Optional[str] = None, error: Optional[str] = None):
+    """Handle OAuth callback"""
+    # Check for errors
+    if error:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": f"Authentication error: {error}"}
+        )
+    
+    # Verify state token
+    if state not in oauth_flows:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": "Invalid state parameter. Authentication failed."}
+        )
+    
+    # Get the flow
+    flow = oauth_flows[state]
+    
+    # Remove the used state token
+    del oauth_flows[state]
+    
+    try:
+        # Exchange the authorization code for credentials
+        flow.fetch_token(code=code)
+        credentials = flow.credentials
+        
+        # Save the credentials
+        save_credentials_to_token_file(credentials, TOKEN_PATH)
+        
+        # Redirect to the frontend
+        return RedirectResponse("/")
+    except Exception as e:
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": f"Failed to exchange auth code: {str(e)}"}
+        )
 
 
 @router.post("/upload-credentials")
@@ -101,4 +203,4 @@ async def reset_authentication(background_tasks: BackgroundTasks):
     # Use background task to avoid blocking the response
     background_tasks.add_task(remove_token)
 
-    return {"status": "success", "message": "Authentication will be reset. Please restart the application to re-authenticate."}
+    return {"status": "success", "message": "Authentication has been reset. You can now sign in with a different Google account."}

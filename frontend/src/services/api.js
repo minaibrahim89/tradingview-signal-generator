@@ -58,6 +58,10 @@ api.interceptors.response.use(
 
 // Auth API
 export const getAuthStatus = () => api.get('/auth/status');
+export const startGoogleAuth = () => {
+    // This will redirect to Google auth page, so we open it in the current window
+    window.location.href = `${BASE_URL}/auth/login`;
+};
 export const uploadCredentials = (file) => {
     const formData = new FormData();
     formData.append('file', file);

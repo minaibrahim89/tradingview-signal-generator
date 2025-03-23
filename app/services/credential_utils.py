@@ -43,4 +43,54 @@ def get_google_credentials_data():
     except Exception as e:
         logger.error(f"Failed to load credentials from file: {e}")
         print(f"ERROR: Failed to load credentials from file: {e}")
-        return None 
+        return None
+
+def save_credentials_to_token_file(credentials, token_path):
+    """
+    Save credentials to token file.
+    
+    Args:
+        credentials: Google OAuth credentials object
+        token_path: Path to save token file
+    """
+    # Create credentials info dictionary
+    creds_data = {
+        'token': credentials.token,
+        'refresh_token': credentials.refresh_token,
+        'token_uri': credentials.token_uri,
+        'client_id': credentials.client_id,
+        'client_secret': credentials.client_secret,
+        'scopes': credentials.scopes,
+    }
+    
+    # Add id_token if available (contains user info including email)
+    if hasattr(credentials, 'id_token'):
+        creds_data['id_token'] = credentials.id_token
+    
+    # Extract email from id_token if available
+    if hasattr(credentials, 'id_token') and credentials.id_token:
+        try:
+            # Parse JWT payload (second part of the token)
+            jwt_segments = credentials.id_token.split('.')
+            if len(jwt_segments) >= 2:
+                payload = jwt_segments[1]
+                # Add padding if needed
+                payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
+                # Decode base64
+                decoded = base64.b64decode(payload).decode('utf-8')
+                token_data = json.loads(decoded)
+                if 'email' in token_data:
+                    creds_data['email'] = token_data['email']
+        except Exception as e:
+            logger.error(f"Error extracting email from id_token: {e}")
+    
+    # Save to file
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(token_path)), exist_ok=True)
+        with open(token_path, 'w') as token_file:
+            json.dump(creds_data, token_file)
+        logger.info(f"Credentials saved to {token_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving credentials to {token_path}: {e}")
+        return False 

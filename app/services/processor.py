@@ -14,17 +14,15 @@ from google.auth.transport.requests import Request
 
 from app.models.database import EmailMonitorConfig, WebhookConfig, ProcessedEmail
 from app.api.endpoints.websocket import broadcast_email_processed
-from app.services.credential_utils import get_google_credentials_data
+from app.services.credential_utils import get_google_credentials_data, save_credentials_to_token_file
+from app.config import TOKEN_PATH, CREDENTIALS_PATH, SCOPES
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Gmail API scopes
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-
-# For OAuth debugging
+# For OAuth debugging during development only
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Allow HTTP for localhost
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'   # Allow scope downgrade
 
@@ -33,36 +31,32 @@ class EmailProcessor:
     def __init__(self):
         self._running = False
         self._tasks = set()
-        self._service = None
         self._processed_ids: Set[str] = set()
         self._lock = asyncio.Lock()
-        self.token_path = os.getenv("GMAIL_TOKEN_PATH", "token.json")
-        self.credentials_path = os.getenv(
-            "GMAIL_CREDENTIALS_PATH", "credentials.json")
-
+        self.credentials_path = CREDENTIALS_PATH
+        self.token_path = TOKEN_PATH
+        self._gmail_service = None
+        
     async def initialize_gmail_service(self):
         """Initialize the Gmail API service."""
         try:
             credentials = await self._get_credentials()
             if not credentials:
-                return False
-
-            # Build the Gmail service
-            self._service = build('gmail', 'v1', credentials=credentials)
-            logger.info("Gmail service initialized successfully")
-            print("\nSuccessfully authenticated with Gmail!")
-            return True
+                logger.error("Failed to get credentials. Gmail service not initialized.")
+                return None
+                
+            # Build the Gmail API service
+            logger.info("Building Gmail API service")
+            self._gmail_service = build('gmail', 'v1', credentials=credentials)
+            logger.info("Gmail API service initialized successfully")
+            return self._gmail_service
         except Exception as e:
-            logger.error(f"Failed to initialize Gmail service: {e}")
-            print(f"\nError initializing Gmail service: {e}")
-            return False
-
+            logger.error(f"Error initializing Gmail service: {e}")
+            return None
+            
     async def _get_credentials(self):
-        """Get Gmail API credentials through OAuth flow."""
+        """Get OAuth2 credentials for the Gmail API."""
         try:
-            # Check if token exists
-            credentials = None
-
             logger.info(f"Looking for token at: {self.token_path}")
             
             # Load stored credentials token if it exists
@@ -75,51 +69,29 @@ class EmailProcessor:
                         try:
                             credentials.refresh(Request())
                             # Save the refreshed credentials
-                            self._save_credentials(credentials)
+                            save_credentials_to_token_file(credentials, self.token_path)
                         except Exception as refresh_error:
                             logger.error(f"Error refreshing credentials: {refresh_error}")
-                            credentials = await self._handle_invalid_credentials(credentials)
+                            # Try the OAuth flow as a fallback
+                            return None
                     return credentials
                 except Exception as e:
                     logger.error(f"Error loading token file: {e}")
-                    # Continue to the OAuth flow
+                    # Token file exists but is corrupted or invalid, remove it
+                    if os.path.exists(self.token_path):
+                        os.remove(self.token_path)
+                        logger.info(f"Removed invalid token file: {self.token_path}")
+                    return None
             
-            # If no valid token exists, perform OAuth flow
-            # First, check if credentials can be loaded from environment or file
-            
-            creds_data = get_google_credentials_data()
-            if not creds_data:
-                self._show_credentials_error()
-                return None
-                
-            # Verify it's a desktop client type
-            installed = creds_data.get('installed', None)
-            if not installed:
-                logger.error("Invalid credentials: Not a desktop app client type")
-                print("Invalid credentials.json: Not a desktop app client type")
-                print("\nERROR: Your credentials.json file is not for a desktop application.")
-                self._show_oauth_troubleshooting()
-                return None
-                
-            # Perform the OAuth flow to get credentials
-            return await self._perform_oauth_flow()
-                
-        except Exception as e:
-            logger.error(f"Failed to get credentials: {e}")
-            print(f"\nError getting credentials: {e}")
+            # No valid token exists
+            logger.warning("No valid token found. Authentication required.")
+            logger.info("Please authenticate through the web interface at /api/v1/auth/login")
             return None
             
-    def _show_credentials_error(self):
-        """Show error message for missing credentials file."""
-        print(
-            f"\nERROR: Credentials file not found at {self.credentials_path}")
-        print("\nPlease download OAuth credentials from Google Cloud Console:")
-        print("1. Go to https://console.cloud.google.com/")
-        print("2. Select your project")
-        print("3. Go to APIs & Services > Credentials")
-        print("4. Create or download existing OAuth client ID credentials")
-        print("5. Save the file as 'credentials.json' in the application directory")
-
+        except Exception as e:
+            logger.error(f"Failed to get credentials: {e}")
+            return None
+            
     def _load_token_file(self):
         """Load credentials from token file."""
         try:
@@ -135,185 +107,32 @@ class EmailProcessor:
                 logger.info(f"Removed corrupted token file: {self.token_path}")
             return None
 
-    async def _handle_invalid_credentials(self, credentials):
-        """Handle expired or missing credentials."""
-        # Try to refresh if expired
-        if credentials and credentials.expired and credentials.refresh_token:
-            try:
-                logger.info("Refreshing expired credentials")
-                credentials.refresh(Request())
-                return credentials
-            except Exception as e:
-                logger.error(f"Error refreshing credentials: {e}")
-                if os.path.exists(self.token_path):
-                    os.remove(self.token_path)
-                    logger.info(
-                        f"Removed invalid token file: {self.token_path}")
-
-        # Need to perform OAuth flow
-        return await self._perform_oauth_flow()
-
-    async def _perform_oauth_flow(self):
-        """Perform the OAuth flow to get credentials."""
-        try:
-            creds_data = get_google_credentials_data()
-            if not creds_data:
-                return None
-                
-            # Create a flow using the credentials data
-            flow = InstalledAppFlow.from_client_config(
-                creds_data,
-                scopes=['https://www.googleapis.com/auth/gmail.readonly']
-            )
-            
-            # Rest of the method remains unchanged
-            logger.info("Starting OAuth flow for user consent")
-
-            # Configure flow with specific settings
-            flow.redirect_uri = "http://localhost"
-
-            # Determine authentication method
-            use_local_server = os.getenv(
-                "USE_LOCAL_SERVER_AUTH", "false").lower() == "true"
-
-            if use_local_server:
-                return self._run_local_server_auth(flow)
-            else:
-                return await self._run_manual_auth(flow)
-
-        except Exception as e:
-            logger.error(f"Error in OAuth flow: {e}")
-            print(f"\nError in OAuth flow: {e}")
-            self._show_oauth_troubleshooting()
-            return None
-
-    def _run_local_server_auth(self, flow):
-        """Run the local server OAuth flow."""
-        try:
-            logger.info("Using local server authentication flow")
-            return flow.run_local_server(port=0)
-        except Exception as e:
-            logger.error(f"Error in local server auth: {e}")
-            print(f"\nError during local server authentication: {e}")
-            print("Falling back to manual authorization...")
-            return None
-
-    async def _run_manual_auth(self, flow):
-        """Run the manual OAuth flow."""
-        logger.info("Using manual authorization flow")
-
-        # Generate authorization URL
-        auth_url, _ = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'
-        )
-
-        self._show_auth_instructions(auth_url)
-
-        # Get the redirected URL from user
-        redirect_url = input("\nPaste the full redirect URL here: ").strip()
-
-        try:
-            # Extract code from redirect URL
-            auth_code = self._extract_auth_code(redirect_url)
-
-            # Exchange auth code for credentials
-            logger.info("Exchanging authorization code for credentials")
-            flow.fetch_token(code=auth_code)
-            credentials = flow.credentials
-            logger.info("Successfully obtained credentials")
-            return credentials
-        except Exception as e:
-            logger.error(f"Error exchanging auth code: {e}")
-            print(f"\nError exchanging authorization code: {e}")
-            self._show_auth_error_help(e)
-            return None
-
-    def _show_auth_instructions(self, auth_url):
-        """Show instructions for the manual authorization flow."""
-        print("\n")
-        print("=" * 80)
-        print("IMPORTANT: AUTHORIZATION REQUIRED")
-        print("=" * 80)
-        print("\nPlease open this URL in your browser and sign in with your Gmail account:")
-        print(f"\n{auth_url}\n")
-        print("IMPORTANT INSTRUCTIONS:")
-        print("1. When prompted, click 'Continue' to proceed")
-        print("2. Select your Google account that has the emails you want to monitor")
-        print("3. You may see a warning that says 'Google hasn't verified this app'")
-        print(
-            "   → Click 'Continue' or 'Advanced' and then 'Go to <your project> (unsafe)'")
-        print("4. On the consent screen, click 'ALLOW' to grant access to your Gmail")
-        print("5. You will be redirected to localhost (which may show as not working - that's normal)")
-        print("6. From the browser address bar, copy the ENTIRE URL after redirection")
-        print("=" * 80)
-
-    def _extract_auth_code(self, redirect_url):
-        """Extract the authorization code from the redirect URL."""
-        if redirect_url.startswith("http://localhost") and "?code=" in redirect_url:
-            try:
-                from urllib.parse import parse_qs, urlparse
-                parsed_url = urlparse(redirect_url)
-                auth_code = parse_qs(parsed_url.query)['code'][0]
-                logger.info("Successfully extracted code from redirect URL")
-                return auth_code
-            except Exception as e:
-                logger.error(f"Error extracting code from URL: {e}")
-                return input("Could not extract code. Please enter just the code part: ").strip()
-        else:
-            return redirect_url  # Assume user entered just the code
-
-    def _show_auth_error_help(self, error):
-        """Show helpful messages for common auth errors."""
-        if "access_denied" in str(error).lower():
-            print("\nACCESS DENIED ERROR: You must click ALLOW on the consent screen.")
-            print("Please try again and make sure to grant permission when prompted.")
-        elif "invalid_grant" in str(error).lower():
-            print("\nINVALID GRANT ERROR: The authorization code is invalid or expired.")
-            print("Please try again with a fresh authorization URL.")
-
-    def _show_oauth_troubleshooting(self):
-        """Show troubleshooting steps for OAuth issues."""
-        print("\nTroubleshooting steps:")
-        print("1. Make sure your credentials.json is for a Desktop application")
-        print("2. Verify that your Google Cloud project has the Gmail API enabled")
-        print("3. Check that your OAuth consent screen is configured correctly")
-        print("4. Ensure you have added yourself as a test user")
-        print("5. When authorizing, make sure to click 'ALLOW' on the consent screen")
-        print("6. If you see 'This app isn't verified', click Advanced and then 'Go to <project> (unsafe)'")
-
     def _save_credentials(self, credentials):
         """Save credentials to token file."""
         try:
-            logger.info(f"Saving credentials to {self.token_path}")
-            with open(self.token_path, 'w') as token:
-                token.write(credentials.to_json())
-            logger.info("Credentials saved successfully")
+            save_credentials_to_token_file(credentials, self.token_path)
+            return True
         except Exception as e:
             logger.error(f"Error saving credentials: {e}")
-            print(f"Warning: Could not save credentials: {e}")
-
+            return False
+            
     async def start_background_tasks(self, db: Session):
-        """Start background tasks for monitoring emails."""
-        if self._running:
-            return
-
-        self._running = True
-
-        # Initialize Gmail service
-        success = await self.initialize_gmail_service()
-        if not success:
-            logger.error(
-                "Failed to start email monitoring due to Gmail service initialization failure")
-            self._running = False
+        """Start all background tasks."""
+        # First attempt to initialize the Gmail service
+        self._gmail_service = await self.initialize_gmail_service()
+        
+        if not self._gmail_service:
+            logger.warning("Gmail service not initialized. Monitoring tasks will not start.")
             return None
+            
+        logger.info("Starting email monitor tasks")
+        self._running = True
 
         # Start the monitor task
         monitor_task = asyncio.create_task(self._email_monitor_loop(db))
         self._tasks.add(monitor_task)
         monitor_task.add_done_callback(self._tasks.discard)
-
+        
         return monitor_task
 
     def stop_monitoring(self):
@@ -345,13 +164,13 @@ class EmailProcessor:
 
     async def _check_emails(self, config: EmailMonitorConfig, db: Session):
         """Check for new emails based on the configuration."""
-        if not self._service:
+        if not self._gmail_service:
             logger.error("Gmail service not initialized")
             return
 
         try:
             query = self._build_gmail_query(config)
-            results = self._service.users().messages().list(userId='me', q=query).execute()
+            results = self._gmail_service.users().messages().list(userId='me', q=query).execute()
             messages = results.get('messages', [])
 
             for message in messages:
@@ -391,7 +210,7 @@ class EmailProcessor:
             return
 
         # Get the message content
-        msg = self._service.users().messages().get(
+        msg = self._gmail_service.users().messages().get(
             userId='me', id=message_id).execute()
 
         # Extract email data

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -13,160 +13,151 @@ import {
   AlertTitle,
   Grid,
   Link,
+  CircularProgress,
 } from '@mui/material';
-import { UploadFile as UploadIcon, Refresh as RefreshIcon } from '@mui/icons-material';
+import { 
+  Google as GoogleIcon,
+  Refresh as RefreshIcon,
+  Email as EmailIcon
+} from '@mui/icons-material';
+import { getAuthStatus, resetAuth, startGoogleAuth } from '../services/api';
 
 function Settings() {
-  const [file, setFile] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState({
-    loading: false,
-    success: false,
-    error: null,
+  const [authStatus, setAuthStatus] = useState({
+    loading: true,
+    is_authenticated: false,
+    credentials_exist: false,
+    token_exists: false,
+    email: null,
   });
 
-  const handleFileChange = (event) => {
-    const selectedFile = event.target.files[0];
-    setFile(selectedFile);
-  };
+  // Load authentication status when component mounts
+  useEffect(() => {
+    fetchAuthStatus();
+  }, []);
 
-  const handleUpload = () => {
-    if (!file) return;
-
-    // This is a mock implementation - in a real app you'd send the file to the server
-    setUploadStatus({ loading: true, success: false, error: null });
-
-    // Simulate API call
-    setTimeout(() => {
-      // Check if file is named credentials.json
-      if (file.name !== 'credentials.json') {
-        setUploadStatus({
-          loading: false,
-          success: false,
-          error: 'The file must be named credentials.json',
-        });
-        return;
-      }
-
-      setUploadStatus({
+  const fetchAuthStatus = async () => {
+    try {
+      setAuthStatus(prev => ({ ...prev, loading: true }));
+      const { data } = await getAuthStatus();
+      setAuthStatus({
         loading: false,
-        success: true,
-        error: null,
+        ...data
       });
-    }, 1500);
+    } catch (error) {
+      console.error('Error fetching auth status:', error);
+      setAuthStatus({
+        loading: false,
+        is_authenticated: false,
+        credentials_exist: false,
+        token_exists: false,
+        error: 'Failed to load authentication status'
+      });
+    }
   };
 
-  const handleResetAuth = () => {
+  const handleResetAuth = async () => {
     if (window.confirm('Are you sure you want to reset authentication? You will need to re-authenticate with Google.')) {
-      // Mock implementation - would send a request to the server
-      alert('Authentication reset! You will need to restart the application to re-authenticate.');
+      try {
+        await resetAuth();
+        alert('Authentication reset! You can now sign in with a different Google account.');
+        // Refresh auth status
+        fetchAuthStatus();
+      } catch (error) {
+        alert(`Error resetting authentication: ${error.message}`);
+      }
     }
+  };
+
+  const handleGoogleSignIn = () => {
+    startGoogleAuth();
   };
 
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Settings
+        Gmail Account
       </Typography>
-
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Gmail API Credentials
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Upload your Google Cloud OAuth credentials to connect your Gmail account.
-              </Typography>
-
-              <Alert severity="info" sx={{ mb: 2 }}>
-                <AlertTitle>How to get credentials</AlertTitle>
-                1. Go to the <Link href="https://console.cloud.google.com" target="_blank" rel="noopener">Google Cloud Console</Link>
-                <br />
-                2. Create a project and enable the Gmail API
-                <br />
-                3. Create OAuth credentials for a desktop application
-                <br />
-                4. Download the credentials JSON file and rename it to <strong>credentials.json</strong>
-              </Alert>
-
-              <Box sx={{ my: 2 }}>
-                <input
-                  accept=".json"
-                  style={{ display: 'none' }}
-                  id="credentials-file"
-                  type="file"
-                  onChange={handleFileChange}
-                />
-                <label htmlFor="credentials-file">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                    startIcon={<UploadIcon />}
-                  >
-                    Select File
-                  </Button>
-                </label>
-                {file && (
-                  <Typography variant="body2" sx={{ mt: 1 }}>
-                    Selected file: {file.name}
-                  </Typography>
-                )}
-              </Box>
-
-              {uploadStatus.error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {uploadStatus.error}
+      
+      {authStatus.loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <Card sx={{ mb: 3, maxWidth: 600 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
+              Gmail Account Status
+            </Typography>
+            
+            {authStatus.is_authenticated ? (
+              <>
+                <Alert severity="success" sx={{ mb: 3 }}>
+                  <AlertTitle>Connected to Gmail</AlertTitle>
+                  You are signed in as <strong>{authStatus.email || 'Unknown user'}</strong>
+                  <Box sx={{ mt: 1 }}>
+                    The application is now monitoring this Gmail account for emails.
+                  </Box>
                 </Alert>
-              )}
-
-              {uploadStatus.success && (
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  Credentials uploaded successfully! You will need to restart the application to use the new credentials.
+                
+                <Button
+                  variant="outlined"
+                  color="error"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleResetAuth}
+                  size="small"
+                >
+                  Sign out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  <AlertTitle>Not connected to Gmail</AlertTitle>
+                  Sign in with Google to start monitoring your Gmail account
                 </Alert>
-              )}
-            </CardContent>
-            <CardActions>
-              <Button
-                variant="contained"
-                onClick={handleUpload}
-                disabled={!file || uploadStatus.loading}
-              >
-                Upload Credentials
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
+                
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="large"
+                  startIcon={<GoogleIcon />}
+                  onClick={handleGoogleSignIn}
+                  fullWidth
+                  sx={{ py: 1.5 }}
+                >
+                  Sign in with Google
+                </Button>
+                
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, fontSize: '0.85rem' }}>
+                  Note: This app will only read your emails (it cannot modify or send emails).
+                  You can revoke access anytime from your Google account settings.
+                </Typography>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Authentication Reset
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                If you're having issues with Google authentication or want to use a different account, you can reset the authentication.
-              </Typography>
-
-              <Alert severity="warning">
-                <AlertTitle>Warning</AlertTitle>
-                Resetting authentication will delete the current token and require you to re-authenticate with Google.
-                The email processor will stop until re-authentication is complete.
-              </Alert>
-            </CardContent>
-            <CardActions>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<RefreshIcon />}
-                onClick={handleResetAuth}
-              >
-                Reset Authentication
-              </Button>
-            </CardActions>
-          </Card>
-        </Grid>
-      </Grid>
+      <Paper sx={{ p: 3, mt: 3, maxWidth: 800 }}>
+        <Typography variant="h6" gutterBottom>
+          How it works
+        </Typography>
+        <Divider sx={{ mb: 2 }} />
+        
+        <Typography variant="body2" paragraph>
+          1. Sign in with your Google account to connect your Gmail
+        </Typography>
+        <Typography variant="body2" paragraph>
+          2. Configure which emails to monitor in the Email Configurations section
+        </Typography>
+        <Typography variant="body2" paragraph>
+          3. Set up webhooks to forward the email content
+        </Typography>
+        <Typography variant="body2" paragraph>
+          4. The application will automatically check for new emails and forward them to your webhooks
+        </Typography>
+      </Paper>
 
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h6" gutterBottom>
@@ -218,11 +209,11 @@ function Settings() {
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth
-              label="Authentication Method"
-              defaultValue="Headless (console-based)"
+              label="Redirect URI"
+              defaultValue="http://localhost:5173"
               InputProps={{ readOnly: true }}
               variant="filled"
-              helperText="Method for Google authentication (USE_LOCAL_SERVER_AUTH)"
+              helperText="OAuth redirect URI (GOOGLE_REDIRECT_URI)"
               size="small"
               margin="normal"
             />
