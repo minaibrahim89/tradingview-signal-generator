@@ -19,10 +19,9 @@ import {
   Google as GoogleIcon,
   Refresh as RefreshIcon,
   Email as EmailIcon,
-  Delete as DeleteIcon,
-  PlayArrow as PlayArrowIcon
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import { getAuthStatus, resetAuth, startGoogleAuth, clearStateTokens, restartService } from '../services/api';
+import { getAuthStatus, resetAuth, startGoogleAuth, clearStateTokens } from '../services/api';
 
 function Settings() {
   const [authStatus, setAuthStatus] = useState({
@@ -50,16 +49,6 @@ function Settings() {
       // Add a small delay to ensure token is saved before checking status
       setTimeout(async () => {
         await fetchAuthStatus();
-        // After fetching status, try to restart service to apply the new token
-        try {
-          console.log("Auto-restarting service after successful authentication...");
-          await restartService();
-          console.log("Service restarted successfully, refreshing status again...");
-          // Refresh status again after restart
-          await fetchAuthStatus();
-        } catch (error) {
-          console.error("Error auto-restarting service:", error);
-        }
       }, 1000);
     }
   }, []);
@@ -115,22 +104,6 @@ function Settings() {
     }
   };
 
-  // Add this function to handle service restart
-  const handleRestartService = async () => {
-    try {
-      console.log("Restarting Gmail service...");
-      setAuthStatus(prev => ({ ...prev, loading: true }));
-      await restartService();
-      alert('Gmail service restarted successfully!');
-      // Refresh auth status
-      await fetchAuthStatus();
-    } catch (error) {
-      console.error('Error restarting service:', error);
-      alert(`Failed to restart service: ${error.response?.data?.message || error.message}`);
-      setAuthStatus(prev => ({ ...prev, loading: false }));
-    }
-  };
-
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -168,16 +141,6 @@ function Settings() {
                   >
                     Sign out
                   </Button>
-                  
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    startIcon={<PlayArrowIcon />}
-                    onClick={handleRestartService}
-                    size="small"
-                  >
-                    Restart Service
-                  </Button>
                 </Box>
               </>
             ) : (
@@ -212,18 +175,6 @@ function Settings() {
                   >
                     Refresh Status
                   </Button>
-                  
-                  {authStatus.token_exists && (
-                    <Button
-                      variant="text"
-                      color="primary"
-                      size="small"
-                      startIcon={<PlayArrowIcon />}
-                      onClick={handleRestartService}
-                    >
-                      Restart Service
-                    </Button>
-                  )}
                 </Box>
               </>
             )}
@@ -300,10 +251,10 @@ function Settings() {
             <TextField
               fullWidth
               label="Credentials Path"
-              defaultValue="credentials.json"
+              defaultValue="./credentials.json"
               InputProps={{ readOnly: true }}
               variant="filled"
-              helperText="Path to Google credentials file (GMAIL_CREDENTIALS_PATH)"
+              helperText="Path to Google credentials file in root directory (GMAIL_CREDENTIALS_PATH)"
               size="small"
               margin="normal"
             />
@@ -312,10 +263,10 @@ function Settings() {
             <TextField
               fullWidth
               label="Token Path"
-              defaultValue="token.json"
+              defaultValue="./token.json"
               InputProps={{ readOnly: true }}
               variant="filled"
-              helperText="Path to OAuth token file (GMAIL_TOKEN_PATH)"
+              helperText="Path to OAuth token file in root directory (GMAIL_TOKEN_PATH)"
               size="small"
               margin="normal"
             />

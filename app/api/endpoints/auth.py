@@ -752,30 +752,4 @@ async def clear_state_tokens():
             status_code=500,
             content={"status": "error", "message": f"Error clearing state tokens: {str(e)}"}
         )
-@router.post("/restart-service")
-async def restart_service():
-    """Restart the Gmail service to pick up new credentials"""
-    from app.main import email_processor
-
-    try:
-        print("Stopping existing email monitoring tasks...")
-        email_processor.stop_monitoring()
-        
-        print("Reinitializing Gmail service...")
-        gmail_service = await email_processor.initialize_gmail_service()
-        
-        if gmail_service:
-            print("Gmail service reinitialized successfully")
-            # Start monitoring tasks
-            from app.main import get_db
-            db = next(get_db())
-            await email_processor.start_background_tasks(db)
-            return {"status": "success", "message": "Email processor service restarted successfully"}
-        else:
-            print("Failed to reinitialize Gmail service")
-            return {"status": "error", "message": "Failed to reinitialize Gmail service"}
-    except Exception as e:
-        print(f"Error restarting services: {e}")
-        print(traceback.format_exc())
-        return {"status": "error", "message": f"Error restarting services: {str(e)}"}
 

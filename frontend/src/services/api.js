@@ -65,7 +65,6 @@ export const uploadCredentials = (file) => {
 };
 export const resetAuth = () => api.post('/auth/reset-auth');
 export const clearStateTokens = () => api.get('/auth/clear-state-tokens');
-export const restartService = () => api.post('/auth/restart-service');
 
 // Webhooks API
 export const getWebhooks = () => api.get('/webhooks');
