@@ -14,7 +14,8 @@ const normalizePath = (path) => {
         cleanPath.match(/\/webhooks\/\d+$/) ||
         cleanPath.match(/\/email-configs\/\d+$/) ||
         cleanPath.match(/\/processed-emails\/\d+$/) ||
-        cleanPath.includes('/upload-')) {
+        cleanPath.includes('/upload-') ||
+        cleanPath === 'auth/clear-state-tokens') {
         return cleanPath;
     }
 
@@ -72,6 +73,7 @@ export const uploadCredentials = (file) => {
     });
 };
 export const resetAuth = () => api.post('/auth/reset-auth');
+export const clearStateTokens = () => api.get('/auth/clear-state-tokens');
 
 // Webhooks API
 export const getWebhooks = () => api.get('/webhooks');

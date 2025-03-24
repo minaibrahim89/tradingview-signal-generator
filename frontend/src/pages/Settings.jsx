@@ -18,9 +18,10 @@ import {
 import { 
   Google as GoogleIcon,
   Refresh as RefreshIcon,
-  Email as EmailIcon
+  Email as EmailIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import { getAuthStatus, resetAuth, startGoogleAuth } from '../services/api';
+import { getAuthStatus, resetAuth, startGoogleAuth, clearStateTokens } from '../services/api';
 
 function Settings() {
   const [authStatus, setAuthStatus] = useState({
@@ -71,6 +72,18 @@ function Settings() {
 
   const handleGoogleSignIn = () => {
     startGoogleAuth();
+  };
+
+  const handleClearStateTokens = async () => {
+    if (window.confirm('Are you sure you want to clear OAuth state tokens? This is only needed if you are experiencing authentication issues.')) {
+      try {
+        const { data } = await clearStateTokens();
+        alert(`State tokens cleared! ${data.message}`);
+      } catch (error) {
+        console.error('Error clearing state tokens:', error);
+        alert(`Error clearing state tokens: ${error.response?.data?.message || error.message}`);
+      }
+    }
   };
 
   return (
@@ -161,6 +174,28 @@ function Settings() {
 
       <Paper sx={{ p: 3, mt: 3 }}>
         <Typography variant="h6" gutterBottom>
+          Advanced Settings
+        </Typography>
+        <Divider sx={{ mb: 2 }} />
+        
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <AlertTitle>Caution</AlertTitle>
+          The following actions are for troubleshooting purposes. Only use them if you're experiencing issues with authentication.
+        </Alert>
+        
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteIcon />}
+          onClick={handleClearStateTokens}
+          sx={{ mr: 2 }}
+        >
+          Clear OAuth State Tokens
+        </Button>
+      </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
           Environment Configuration
         </Typography>
         <Divider sx={{ mb: 2 }} />
@@ -210,7 +245,7 @@ function Settings() {
             <TextField
               fullWidth
               label="Redirect URI"
-              defaultValue="http://localhost:5173"
+              defaultValue="http://localhost:5173/auth/callback"
               InputProps={{ readOnly: true }}
               variant="filled"
               helperText="OAuth redirect URI (GOOGLE_REDIRECT_URI)"
