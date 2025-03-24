@@ -185,41 +185,73 @@ class AuthStatus(BaseModel):
 @router.get("/status", response_model=AuthStatus)
 async def get_auth_status():
     """Get the current authentication status"""
-    # Check for credentials
-    token_exists = os.path.exists(TOKEN_PATH)
+    # Check for credentials in multiple locations
+    token_paths = [
+        TOKEN_PATH,                                                        # From config (app/token.json)
+        os.path.join(BASE_DIR, "token.json"),                             # In base dir
+        os.path.join(os.path.dirname(BASE_DIR), "token.json"),            # In parent dir
+        os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")), "token.json"),  # App root
+    ]
+    
+    print("Checking token paths:")
+    for idx, path in enumerate(token_paths):
+        print(f"  Path {idx+1}: {path}, exists: {os.path.exists(path)}")
+    
+    token_exists = False
+    token_path_found = None
+    email = None
+    
+    for path in token_paths:
+        if os.path.exists(path):
+            token_exists = True
+            token_path_found = path
+            print(f"Found token file at: {path}")
+            try:
+                with open(path, 'r') as f:
+                    token_data = json.load(f)
+                    email = token_data.get('email', None)
+                    refresh_token = token_data.get('refresh_token')
+                    print(f"Token data: has refresh_token = {refresh_token is not None}")
+                    
+                    if not email and 'id_token' in token_data:
+                        # Try to extract email from id_token if available
+                        import base64
+                        id_token = token_data['id_token']
+                        # Extract the payload part (second segment)
+                        if id_token:
+                            payload = id_token.split('.')[1]
+                            # Add padding if needed
+                            payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
+                            try:
+                                decoded = base64.b64decode(payload).decode('utf-8')
+                                payload_data = json.loads(decoded)
+                                email = payload_data.get('email', None)
+                            except:
+                                pass
+                # Copy token to the intended location if found elsewhere
+                if path != TOKEN_PATH:
+                    print(f"Copying token from {path} to {TOKEN_PATH}")
+                    try:
+                        os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
+                        with open(path, 'r') as src, open(TOKEN_PATH, 'w') as dst:
+                            dst.write(src.read())
+                    except Exception as e:
+                        print(f"Error copying token: {e}")
+            except Exception as e:
+                print(f"Error reading token from {path}: {e}")
+            break
     
     # Check if we have client ID and secret configured
     credentials_exist = (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET) or get_google_credentials_data() is not None
 
-    email = None
-    if token_exists:
-        try:
-            with open(TOKEN_PATH, 'r') as f:
-                token_data = json.load(f)
-                email = token_data.get('email', None)
-                if not email and 'id_token' in token_data:
-                    # Try to extract email from id_token if available
-                    import base64
-                    id_token = token_data['id_token']
-                    # Extract the payload part (second segment)
-                    payload = id_token.split('.')[1]
-                    # Add padding if needed
-                    payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
-                    try:
-                        decoded = base64.b64decode(payload).decode('utf-8')
-                        payload_data = json.loads(decoded)
-                        email = payload_data.get('email', None)
-                    except:
-                        pass
-        except:
-            pass
-
+    print(f"Auth status: is_authenticated={token_exists}, token_path={token_path_found}")
+    
     return {
         "is_authenticated": token_exists,
         "credentials_exist": credentials_exist,
         "token_exists": token_exists,
         "credentials_path": CREDENTIALS_PATH,
-        "token_path": TOKEN_PATH,
+        "token_path": token_path_found or TOKEN_PATH,
         "email": email
     }
 
@@ -262,70 +294,60 @@ async def login(request: Request, response: Response):
         print(f"State tokens count: {len(state_tokens)}")
         print(f"Memory state tokens count: {len(memory_state_tokens)}")
         
-        # Use the configured client ID and secret if available
-        if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-            print("Using client ID and secret from environment variables")
-            # Create a flow instance with client ID and secret
-            flow = Flow.from_client_config(
-                {
-                    "web": {
-                        "client_id": GOOGLE_CLIENT_ID,
-                        "client_secret": GOOGLE_CLIENT_SECRET,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [REDIRECT_URI]
-                    }
-                },
-                scopes=SCOPES,
-                redirect_uri=REDIRECT_URI
-            )
-            print(f"Created flow from environment variables with redirect_uri: {REDIRECT_URI}")
-        else:
-            print("Trying to use credentials file")
-            # Fall back to credentials file if available
-            creds_data = get_google_credentials_data()
-            if not creds_data:
-                error_msg = "Google credentials not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables or provide a credentials.json file."
-                print(f"ERROR: {error_msg}")
-                raise HTTPException(
-                    status_code=400, 
-                    detail=error_msg
+        # Create the OAuth flow object
+        try:
+            if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+                print("Using client ID and secret from environment variables")
+                flow = Flow.from_client_config(
+                    {
+                        "web": {
+                            "client_id": GOOGLE_CLIENT_ID,
+                            "client_secret": GOOGLE_CLIENT_SECRET,
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "https://oauth2.googleapis.com/token",
+                            "redirect_uris": [REDIRECT_URI]
+                        }
+                    },
+                    scopes=SCOPES,
+                    redirect_uri=REDIRECT_URI
                 )
-            
-            print(f"Found credentials from file with keys: {list(creds_data.keys())}")
-            # Create a flow instance from client config
-            try:
+            else:
+                # Fallback to using credentials.json
+                print("Using client ID and secret from credentials file")
+                creds_data = get_google_credentials_data()
+                
+                if not creds_data:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Google credentials not found. Please upload credentials.json or set environment variables."
+                    )
+                    
                 flow = Flow.from_client_config(
                     creds_data,
                     scopes=SCOPES,
                     redirect_uri=REDIRECT_URI
                 )
-                print(f"Successfully created flow from credentials file with redirect_uri: {REDIRECT_URI}")
-            except Exception as e:
-                error_detail = f"Failed to create flow from credentials file: {str(e)}"
-                print(f"ERROR: {error_detail}")
-                print(traceback.format_exc())
-                raise HTTPException(status_code=400, detail=error_detail)
-        
-        # Generate the authorization URL
-        try:
+                
+            # Store the flow using the state token
+            oauth_flows[state] = flow
+            
+            # Get the authorization URL
+            # IMPORTANT: Always request offline access and force consent to ensure we get a refresh token
             auth_url, _ = flow.authorization_url(
-                access_type='offline',
-                include_granted_scopes='true',
-                prompt='select_account',  # Force account selection screen
-                state=state
+                access_type='offline',              # Request a refresh token for offline access
+                prompt='consent',                  # Force the consent screen to ensure refresh token
+                include_granted_scopes='true',     # Include any previously granted scopes
+                state=state                        # Include state for CSRF protection
             )
-            print(f"Generated auth URL: {auth_url[:100]}...")
+            
+            print(f"Generated authorization URL with state: {state[:5]}...")
+            
+            # Redirect to the authorization URL
+            return RedirectResponse(auth_url)
         except Exception as e:
-            error_detail = f"Failed to generate authorization URL: {str(e)}"
-            print(f"ERROR: {error_detail}")
+            print(f"Error creating OAuth flow: {e}")
             print(traceback.format_exc())
-            raise HTTPException(status_code=400, detail=error_detail)
-        
-        # Store flow information in our dictionary
-        oauth_flows[state] = flow
-        
-        print(f"Redirecting to Google auth: {auth_url[:60]}...")
+            raise HTTPException(status_code=500, detail=f"Failed to create OAuth flow: {str(e)}")
         
         # Redirect to the authorization URL
         return RedirectResponse(auth_url)
@@ -346,6 +368,7 @@ async def login(request: Request, response: Response):
 async def callback(request: Request, state: Optional[str] = None, code: Optional[str] = None, error: Optional[str] = None):
     """Handle OAuth callback"""
     global state_tokens
+    global TOKEN_PATH
     
     # Check if state is missing
     if not state:
@@ -454,47 +477,145 @@ async def callback(request: Request, state: Optional[str] = None, code: Optional
         try:
             print(f"Attempting to exchange authorization code for credentials...")
             print(f"REDIRECT_URI in use: {REDIRECT_URI}")
+            
+            # Debug info - but mask sensitive data
+            code_debug = code[:5] + "..." if code else "None"
+            print(f"Code (truncated): {code_debug}")
+            print(f"Using flow object with redirect_uri: {flow.redirect_uri}")
+            
+            # Explicitly set redirect_uri on the flow again to ensure it matches
+            flow.redirect_uri = REDIRECT_URI
+            
+            # Add small timeout before token exchange to avoid timing issues
+            time.sleep(1)
+            
+            # Exchange code for tokens
             flow.fetch_token(code=code)
             credentials = flow.credentials
             
             print("Successfully obtained credentials from Google")
             
-            # Save the credentials
-            save_credentials_to_token_file(credentials, TOKEN_PATH)
-            
-            # Extract email from credentials if available
-            email = None
-            if hasattr(credentials, 'id_token') and credentials.id_token:
+            # Save the credentials - enhanced error handling
+            try:
+                token_data = {
+                    'token': credentials.token,
+                    'refresh_token': credentials.refresh_token,
+                    'token_uri': credentials.token_uri,
+                    'client_id': credentials.client_id,
+                    'client_secret': credentials.client_secret,
+                    'scopes': credentials.scopes,
+                }
+                
+                # Add extra fields if available
+                if hasattr(credentials, 'id_token'):
+                    token_data['id_token'] = credentials.id_token
+                
+                if hasattr(credentials, 'expiry'):
+                    token_data['expiry'] = credentials.expiry.isoformat() if credentials.expiry else None
+                
+                # Extract email from id_token if available
+                email = None
+                if hasattr(credentials, 'id_token') and credentials.id_token:
+                    try:
+                        # Parse JWT payload (second part of the token)
+                        import base64
+                        jwt_segments = credentials.id_token.split('.')
+                        if len(jwt_segments) >= 2:
+                            payload = jwt_segments[1]
+                            # Add padding if needed
+                            payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
+                            # Decode base64
+                            decoded = base64.b64decode(payload).decode('utf-8')
+                            token_data_jwt = json.loads(decoded)
+                            if 'email' in token_data_jwt:
+                                email = token_data_jwt['email']
+                                token_data['email'] = email  # Add to token data
+                    except Exception as e:
+                        print(f"Error extracting email from id_token: {e}")
+                
+                # IMPORTANT FIX: Explicitly set token path to app root directory
+                app_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+                explicit_token_path = os.path.join(app_root, "token.json")
+                print(f"Setting explicit token path in app root: {explicit_token_path}")
+                
+                # Ensure the app directory exists (it should, but check anyway)
                 try:
-                    # Parse JWT payload (second part of the token)
-                    import base64
-                    jwt_segments = credentials.id_token.split('.')
-                    if len(jwt_segments) >= 2:
-                        payload = jwt_segments[1]
-                        # Add padding if needed
-                        payload += '=' * (4 - len(payload) % 4) if len(payload) % 4 else ''
-                        # Decode base64
-                        decoded = base64.b64decode(payload).decode('utf-8')
-                        token_data = json.loads(decoded)
-                        if 'email' in token_data:
-                            email = token_data['email']
-                except Exception as e:
-                    print(f"Error extracting email from id_token: {e}")
-            
-            # Check if this is a direct or ajax request
-            accept_header = request.headers.get("accept", "")
-            if "json" in accept_header.lower():
-                # If it's an AJAX request, return JSON
+                    os.makedirs(app_root, exist_ok=True)
+                    print(f"App root directory exists: {os.path.exists(app_root)}")
+                    print(f"App root directory writable: {os.access(app_root, os.W_OK)}")
+                except Exception as app_dir_error:
+                    print(f"Error with app root directory: {app_dir_error}")
+                
+                # Try to write the token directly to the app directory first
+                try:
+                    print(f"Writing token directly to app root: {explicit_token_path}")
+                    with open(explicit_token_path, 'w') as f:
+                        json.dump(token_data, f)
+                    print(f"Successfully wrote token to {explicit_token_path}")
+                    
+                    # Update TOKEN_PATH to this new location
+                    TOKEN_PATH = explicit_token_path
+                    
+                    # Verify the file was created
+                    if os.path.exists(explicit_token_path):
+                        print(f"Verified token file exists at {explicit_token_path}")
+                    else:
+                        print(f"ERROR: Token file was not created at {explicit_token_path}")
+                        raise Exception("Token file was not created")
+                    
+                except Exception as explicit_error:
+                    print(f"Failed to write token to app root: {explicit_error}")
+                    print(traceback.format_exc())
+                    
+                    # Continue with the original path as fallback
+                    print(f"Falling back to original TOKEN_PATH: {TOKEN_PATH}")
+                    
+                    # Ensure the directory exists
+                    token_dir = os.path.dirname(TOKEN_PATH)
+                    
+                    try:
+                        os.makedirs(token_dir, exist_ok=True)
+                        print(f"Created token directory: {token_dir}")
+                    except Exception as dir_error:
+                        print(f"ERROR creating token directory: {dir_error}")
+                    
+                    # Try to save using credential_utils helper
+                    try:
+                        success = save_credentials_to_token_file(credentials, TOKEN_PATH)
+                        if success:
+                            print(f"Successfully saved token using credential utility")
+                        else:
+                            print(f"Failed to save token with utility, trying direct approach")
+                            
+                            # Fallback - Write token directly
+                            with open(TOKEN_PATH, 'w') as f:
+                                json.dump(token_data, f)
+                            print(f"Direct token write successful")
+                    except Exception as save_error:
+                        print(f"ERROR saving token: {save_error}")
+                    
+                # Check if this is a direct or ajax request
+                accept_header = request.headers.get("accept", "")
+                if "json" in accept_header.lower():
+                    # If it's an AJAX request, return JSON
+                    return JSONResponse(
+                        content={
+                            "status": "success", 
+                            "message": "Authentication successful",
+                            "email": email
+                        }
+                    )
+                else:
+                    # If it's a direct browser request, redirect to the settings page with success flag
+                    # This will trigger a refresh of the auth status
+                    return RedirectResponse("/settings?auth_success=true")
+            except Exception as e:
+                print(f"ERROR: Failed to save credentials to token file: {e}")
+                print(traceback.format_exc())
                 return JSONResponse(
-                    content={
-                        "status": "success", 
-                        "message": "Authentication successful",
-                        "email": email
-                    }
+                    status_code=500,
+                    content={"status": "error", "message": f"Failed to save token: {str(e)}"}
                 )
-            else:
-                # If it's a direct browser request, redirect to the frontend
-                return RedirectResponse("/")
         except Exception as e:
             print(f"Error exchanging authorization code: {e}")
             print(traceback.format_exc())
@@ -502,9 +623,21 @@ async def callback(request: Request, state: Optional[str] = None, code: Optional
             # Handle common OAuth errors
             error_message = str(e)
             if "invalid_grant" in error_message:
+                # Add more debug info to trace the problem
+                print("Invalid grant error details:")
+                print(f"Code exists: {bool(code)}")
+                print(f"Code length: {len(code) if code else 0}")
+                print(f"Redirect URI: {REDIRECT_URI}")
+                print(f"Flow redirect URI: {flow.redirect_uri}")
+                
                 error_details = "The authorization code has expired or already been used. Please try authenticating again."
+                # Check if we should provide more specific guidance
+                if "already been used" in error_message:
+                    error_details += " (Code was already used once)"
+                elif "expired" in error_message:
+                    error_details += " (Code has expired)"
             elif "redirect_uri_mismatch" in error_message:
-                error_details = f"Redirect URI mismatch. Expected: {REDIRECT_URI}"
+                error_details = f"Redirect URI mismatch. The URI in your Google Console does not match the one used in the application. Expected: {REDIRECT_URI}"
             elif "invalid_client" in error_message:
                 error_details = "Invalid client credentials. Please check your Google API credentials."
             else:
@@ -545,20 +678,47 @@ async def upload_credentials(file: UploadFile = File(...)):
 
 
 @router.post("/reset-auth")
-async def reset_authentication(background_tasks: BackgroundTasks):
-    """Reset authentication by removing the token file"""
-
-    def remove_token():
-        try:
-            if os.path.exists(TOKEN_PATH):
-                os.remove(TOKEN_PATH)
-        except Exception as e:
-            print(f"Error removing token file: {e}")
-
-    # Use background task to avoid blocking the response
-    background_tasks.add_task(remove_token)
-
-    return {"status": "success", "message": "Authentication has been reset. You can now sign in with a different Google account."}
+async def reset_auth():
+    """Reset authentication by removing token file and clearing the state"""
+    try:
+        # Clear token file if it exists
+        token_paths = [
+            TOKEN_PATH,                  # From config 
+            os.path.join(BASE_DIR, "token.json"),  # In base dir
+            os.path.join(os.path.dirname(BASE_DIR), "token.json"),  # In parent dir
+            os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")), "token.json")  # App root
+        ]
+        
+        # Keep track of which paths were cleared
+        cleared_paths = []
+        
+        for path in token_paths:
+            if os.path.exists(path):
+                try:
+                    print(f"Removing token file: {path}")
+                    os.remove(path)
+                    cleared_paths.append(path)
+                    print(f"Successfully removed token file: {path}")
+                except Exception as e:
+                    print(f"Error removing token file {path}: {e}")
+        
+        # Clear OAuth flows and state tokens
+        oauth_flows.clear()
+        state_tokens.clear()
+        memory_state_tokens.clear()
+        save_state_tokens({})
+        
+        print("OAuth flows and state tokens cleared")
+        
+        # Inform user which paths were cleared
+        if cleared_paths:
+            return {"status": "success", "message": f"Authentication reset. Removed token files from: {', '.join(cleared_paths)}"}
+        else:
+            return {"status": "success", "message": "Authentication reset. No token files were found to remove."}
+    except Exception as e:
+        print(f"Error resetting auth: {e}")
+        print(traceback.format_exc())
+        return {"status": "error", "message": f"Failed to reset authentication: {str(e)}"}
 
 @router.post("/clear-state-tokens")
 @router.get("/clear-state-tokens")
@@ -592,3 +752,30 @@ async def clear_state_tokens():
             status_code=500,
             content={"status": "error", "message": f"Error clearing state tokens: {str(e)}"}
         )
+@router.post("/restart-service")
+async def restart_service():
+    """Restart the Gmail service to pick up new credentials"""
+    from app.main import email_processor
+
+    try:
+        print("Stopping existing email monitoring tasks...")
+        email_processor.stop_monitoring()
+        
+        print("Reinitializing Gmail service...")
+        gmail_service = await email_processor.initialize_gmail_service()
+        
+        if gmail_service:
+            print("Gmail service reinitialized successfully")
+            # Start monitoring tasks
+            from app.main import get_db
+            db = next(get_db())
+            await email_processor.start_background_tasks(db)
+            return {"status": "success", "message": "Email processor service restarted successfully"}
+        else:
+            print("Failed to reinitialize Gmail service")
+            return {"status": "error", "message": "Failed to reinitialize Gmail service"}
+    except Exception as e:
+        print(f"Error restarting services: {e}")
+        print(traceback.format_exc())
+        return {"status": "error", "message": f"Error restarting services: {str(e)}"}
+

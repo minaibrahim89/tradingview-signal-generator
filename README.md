@@ -82,6 +82,43 @@ This application monitors a Gmail account for specific emails and forwards their
 
 3. Click "Sign in with Google" to authenticate with your Gmail account
 
+## Setting Up Google Authentication
+
+To connect the application to a Google account, you need to:
+
+1. **Create a Google Cloud Project and OAuth credentials**:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/)
+   - Create a new project or select an existing one
+   - Navigate to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth client ID"
+   - Select "Web application" as the application type
+   - Name your OAuth client
+   - Add authorized redirect URIs:
+     - For local development: `http://localhost:5173/auth/callback`
+     - For production: `https://yourapp.com/auth/callback`
+   - Click "Create"
+   - Download the credentials JSON file
+
+2. **Add the credentials to your application**:
+   - Save the downloaded JSON file as `credentials.json` in the `app/` directory
+   - Alternatively, set the environment variables `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in your `.env` file
+
+3. **Enable the Gmail API**:
+   - In the Google Cloud Console, navigate to "APIs & Services" > "Library"
+   - Search for "Gmail API" and enable it for your project
+
+4. **Test the authentication**:
+   - Start your application (frontend and backend)
+   - Navigate to the Settings page
+   - Click "Sign in with Google"
+   - Follow the authentication flow
+   - After successful authentication, you should be redirected back to your application
+
+5. **Troubleshooting**:
+   - If you encounter "redirect_uri_mismatch" errors, ensure your redirect URI exactly matches what's configured in the Google Cloud Console
+   - For "invalid_grant" errors, try clearing OAuth state tokens in the Advanced Settings section
+   - Check that your credentials.json file is properly formatted and located in the app/ directory
+
 ## Usage
 
 1. Set up webhooks in the Webhooks section

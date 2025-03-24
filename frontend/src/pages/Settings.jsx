@@ -19,9 +19,10 @@ import {
   Google as GoogleIcon,
   Refresh as RefreshIcon,
   Email as EmailIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  PlayArrow as PlayArrowIcon
 } from '@mui/icons-material';
-import { getAuthStatus, resetAuth, startGoogleAuth, clearStateTokens } from '../services/api';
+import { getAuthStatus, resetAuth, startGoogleAuth, clearStateTokens, restartService } from '../services/api';
 
 function Settings() {
   const [authStatus, setAuthStatus] = useState({
@@ -32,15 +33,43 @@ function Settings() {
     email: null,
   });
 
-  // Load authentication status when component mounts
+  // Load authentication status when component mounts or when location changes (like after redirect)
   useEffect(() => {
+    console.log("Settings component mounted or updated, fetching auth status");
     fetchAuthStatus();
+    
+    // Check if we were just redirected from auth flow
+    const queryParams = new URLSearchParams(window.location.search);
+    const authSuccess = queryParams.get('auth_success');
+    
+    if (authSuccess) {
+      console.log("Auth success detected in query params, refreshing status");
+      // Clear the URL parameter so refreshes don't trigger this again
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Add a small delay to ensure token is saved before checking status
+      setTimeout(async () => {
+        await fetchAuthStatus();
+        // After fetching status, try to restart service to apply the new token
+        try {
+          console.log("Auto-restarting service after successful authentication...");
+          await restartService();
+          console.log("Service restarted successfully, refreshing status again...");
+          // Refresh status again after restart
+          await fetchAuthStatus();
+        } catch (error) {
+          console.error("Error auto-restarting service:", error);
+        }
+      }, 1000);
+    }
   }, []);
 
   const fetchAuthStatus = async () => {
     try {
+      console.log("Fetching auth status...");
       setAuthStatus(prev => ({ ...prev, loading: true }));
       const { data } = await getAuthStatus();
+      console.log("Auth status response:", data);
       setAuthStatus({
         loading: false,
         ...data
@@ -86,6 +115,22 @@ function Settings() {
     }
   };
 
+  // Add this function to handle service restart
+  const handleRestartService = async () => {
+    try {
+      console.log("Restarting Gmail service...");
+      setAuthStatus(prev => ({ ...prev, loading: true }));
+      await restartService();
+      alert('Gmail service restarted successfully!');
+      // Refresh auth status
+      await fetchAuthStatus();
+    } catch (error) {
+      console.error('Error restarting service:', error);
+      alert(`Failed to restart service: ${error.response?.data?.message || error.message}`);
+      setAuthStatus(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -113,15 +158,27 @@ function Settings() {
                   </Box>
                 </Alert>
                 
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<RefreshIcon />}
-                  onClick={handleResetAuth}
-                  size="small"
-                >
-                  Sign out
-                </Button>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<RefreshIcon />}
+                    onClick={handleResetAuth}
+                    size="small"
+                  >
+                    Sign out
+                  </Button>
+                  
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    startIcon={<PlayArrowIcon />}
+                    onClick={handleRestartService}
+                    size="small"
+                  >
+                    Restart Service
+                  </Button>
+                </Box>
               </>
             ) : (
               <>
@@ -146,6 +203,28 @@ function Settings() {
                   Note: This app will only read your emails (it cannot modify or send emails).
                   You can revoke access anytime from your Google account settings.
                 </Typography>
+                
+                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                  <Button 
+                    variant="text"
+                    size="small"
+                    onClick={fetchAuthStatus}
+                  >
+                    Refresh Status
+                  </Button>
+                  
+                  {authStatus.token_exists && (
+                    <Button
+                      variant="text"
+                      color="primary"
+                      size="small"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={handleRestartService}
+                    >
+                      Restart Service
+                    </Button>
+                  )}
+                </Box>
               </>
             )}
           </CardContent>

@@ -9,18 +9,9 @@ const normalizePath = (path) => {
     // Remove any leading slash to avoid double slashes
     const cleanPath = path.startsWith('/') ? path.substring(1) : path;
 
-    // Don't add trailing slash for specific endpoints that don't need it
-    if (cleanPath.includes('/test') ||
-        cleanPath.match(/\/webhooks\/\d+$/) ||
-        cleanPath.match(/\/email-configs\/\d+$/) ||
-        cleanPath.match(/\/processed-emails\/\d+$/) ||
-        cleanPath.includes('/upload-') ||
-        cleanPath === 'auth/clear-state-tokens') {
-        return cleanPath;
-    }
-
-    // Return the path with a trailing slash to match backend expectations
-    return cleanPath.endsWith('/') ? cleanPath : `${cleanPath}/`;
+    // IMPORTANT: Remove trailing slashes to match backend FastAPI routes
+    // FastAPI routes are typically defined without trailing slashes
+    return cleanPath.endsWith('/') ? cleanPath.slice(0, -1) : cleanPath;
 };
 
 const api = axios.create({
@@ -74,6 +65,7 @@ export const uploadCredentials = (file) => {
 };
 export const resetAuth = () => api.post('/auth/reset-auth');
 export const clearStateTokens = () => api.get('/auth/clear-state-tokens');
+export const restartService = () => api.post('/auth/restart-service');
 
 // Webhooks API
 export const getWebhooks = () => api.get('/webhooks');
